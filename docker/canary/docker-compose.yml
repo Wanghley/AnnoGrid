@@ -16,29 +16,12 @@ services:
     networks:
       - monitoring
 
-  grafana:
-    user: "1000"
-    image: grafana/grafana:latest
-    container_name: grafana
-    restart: always
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_PANELS_DISABLE_SANITIZE_HTML=true
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-    networks:
-      - monitoring
-    volumes:
-      - "/home/wanghley/homelabservices/grafana/grafana-volume:/var/lib/grafana"
-
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest
     container_name: cadvisor
     restart: always
     ports:
-      - "8080:8080"
+      - "8081:8080"
     command:
       - "-logtostderr"
       - "-docker_only"
@@ -63,56 +46,18 @@ services:
       - "--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)"
       - "--no-collector.ipvs"
       - "--collector.pressure"
+      - "--collector.textfile.directory=/var/lib/node_exporter/textfile_collector"
     volumes:
+      - "/proc:/host/proc:ro"
+      - "/sys:/host/sys:ro"
+      - "/:/rootfs:ro"
+      - "/var/lib/node_exporter/textfile_collector:/var/lib/node_exporter/textfile_collector:ro"
       - "/proc:/host/proc:ro"
       - "/sys:/host/sys:ro"
       - "/:/rootfs:ro"
     networks:
       - monitoring
 
-  netdata:
-    container_name: netdata
-    image: netdata/netdata:stable
-    restart: unless-stopped
-    environment:
-      - PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      - DEBIAN_FRONTEND=noninteractive
-      - NETDATA_OFFICIAL_IMAGE=true
-      - DOCKER_GRP=netdata
-      - DOCKER_USR=netdata
-      - NETDATA_LISTENER_PORT=19999
-    ports:
-      - "19999:19999"
-    volumes:
-      - /etc/group:/host/etc/group:ro
-      - /etc/os-release:/host/etc/os-release:ro
-      - /sys:/host/sys:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - netdata-data:/etc/netdata
-      - netdata-data-3:/var/cache/netdata
-      - /etc/passwd:/host/etc/passwd:ro
-      - /proc:/host/proc:ro
-      - netdata-data-2:/var/lib/netdata
-    networks:
-      - monitoring
-    entrypoint: /usr/sbin/run.sh
-    hostname: netdata
-    healthcheck:
-      test: ["CMD-SHELL", "/usr/sbin/health.sh"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-    security_opt:
-      - apparmor:unconfined
-    cap_add:
-      - SYS_PTRACE
-      - SYS_ADMIN
-
-volumes:
-  netdata-data:
-  netdata-data-2:
-  netdata-data-3:
-
 networks:
   monitoring:
-    driver: bridge
+    external: true
