@@ -1,0 +1,63 @@
+services:
+  db:
+    image: mariadb:latest
+    container_name: nextcloud-db
+    restart: always
+    command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+    volumes:
+      - nextcloud-db:/var/lib/mysql
+      - ./db-config/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    networks:
+      - nextcloudnet
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    image: nextcloud:stable
+    container_name: nextcloud-app
+    restart: always
+    ports:
+      - 7203:80
+    volumes:
+      - nextcloud-app:/var/www/html
+      - /mnt/zeus:/mnt/zeus:rw
+      - /mnt/prometheus:/mnt/prometheus:rw
+    environment:
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_HOST: db
+    depends_on:
+      - db
+    entrypoint: sh -c "sleep 10 && /entrypoint.sh apache2-foreground"
+    networks:
+      - nextcloudnet
+
+  cron:
+    image: nextcloud:stable
+    container_name: nextcloud-cron
+    restart: always
+    volumes:
+      - nextcloud-app:/var/www/html
+      - /mnt/:/mnt/:rw
+    entrypoint: /cron.sh
+    depends_on:
+      - db
+    networks:
+      - nextcloudnet
+
+volumes:
+  nextcloud-db:
+  nextcloud-app:
+
+networks:
+  nextcloudnet:
+    driver: bridge
