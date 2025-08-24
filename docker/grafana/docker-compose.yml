@@ -1,0 +1,27 @@
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    user: "1000"
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_PANELS_DISABLE_SANITIZE_HTML=true
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - monitoring
+
+volumes:
+  grafana-storage:
+    external: true
+    name: grafana-volume
+
+networks:
+  monitoring:
+    external: true
+    name: monitoring

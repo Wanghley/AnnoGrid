@@ -1,2 +1,6 @@
-# insert macos files 
-.DS_Store
+# Ignore all .env files
+.env
+.env.*
+
+# Allow example env templates
+!.env.example
