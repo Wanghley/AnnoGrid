@@ -44,51 +44,145 @@ AnnoGrid is perfect for **tech enthusiasts, home lab builders, students, and dev
 
 ---
 
-## Key Benefits
+## General Architecture
 
-- **Affordable Homelab**: A complete multi-node setup costs far less than a commercial server.  
-- **Energy Efficient**: Runs 24/7 with minimal electricity consumption.  
-- **Self-Hosted Apps**: Host your own services like home automation, cloud storage, media servers, or workflow automation tools.  
-- **Centralized Monitoring**: Gain visibility into system metrics, uptime, and service health across all nodes.  
-- **Flexible Architecture**: Mix and match nodes according to your needs—expand with storage, backup, or compute nodes.  
-- **Secure Networking**: Tailscale mesh VPN ensures private communication between nodes, while Cloudflare Tunnel secures external access.  
+AnnoNAS is structured around **three main types of nodes**:
 
----
+1. **Application Nodes** – run core services and Docker containers.  
+2. **Storage Nodes (NAS)** – manage persistent data and backups.  
+3. **Gateway / Monitoring Nodes** – manage network access, VPN, and collect metrics.  
 
-## Architecture Overview
+Optional future nodes include backup nodes, database nodes, and edge AI accelerators.  
 
-AnnoGrid is composed of **multiple small nodes** that work together as a cohesive system:
-
-1. **Application Nodes** – Run your apps and services in containers or lightweight VMs.  
-2. **Storage Nodes (NAS)** – Centralized storage for files, backups, and shared resources.  
-3. **Gateway & Monitoring Nodes** – Act as a secure network gateway, collecting metrics and monitoring all nodes.  
-
-This architecture allows **easy expansion**, letting you start small and add more nodes as needed. Each node is low-cost, but together they deliver the functionality of a traditional homelab.
-
----
-
-## Example Node Roles
-
-| Role | Function | Typical Use |
-|------|---------|-------------|
-| **App Node** | Runs containers for applications | Workflow automation, personal cloud, media server |
-| **NAS Node** | Provides storage & backup | File server, shared media libraries, database storage |
-| **Gateway Node** | Handles networking & secure ingress | VPN, Cloudflare Tunnels, firewall rules |
-| **Monitoring Node** | Collects and visualizes metrics | Prometheus, Grafana dashboards, service uptime |
-
-Each node can serve **multiple roles** depending on hardware capability and project needs.
+```
+        ┌─────────────────────┐
+        │    Tailscale VPN    │
+        │   & Cloudflare      │
+        │      Gateway        │
+        └─────────┬───────────┘
+                  │
+    ┌─────────────┼─────────────┐
+    │             │             │
+┌───▼───┐    ┌────▼────┐   ┌────▼────┐
+│ App   │    │ Storage │   │Gateway/ │
+│ Node  │    │  (NAS)  │   │Monitor  │
+│       │    │  Node   │   │  Node   │
+└───────┘    └─────────┘   └─────────┘
+```
 
 ---
 
-## Why AnnoGrid?
+## Naming Convention
 
-- **Accessible**: Build your homelab using devices you can afford or already have.  
-- **Modular**: Add, remove, or re-purpose nodes without affecting the whole system.  
-- **Educational**: Learn networking, containerization, monitoring, and system administration hands-on.  
-- **Safe**: Built-in security measures let you expose only what you need.  
-- **Future-Proof**: Easy to expand with new nodes, services, or even AI and edge computing tasks.  
+Each node is named systematically for **clarity and scalability**:
 
-AnnoGrid is a **practical, low-cost alternative to expensive enterprise hardware**, giving you full control over your home or edge computing environment.
+```
+[grid]-[role]-[device]-[id]
+```
+
+| Component | Description | Example |
+|-----------|-------------|---------|
+| grid      | Cluster prefix | `anno` |
+| role      | Node function | `app`, `nas`, `gw`, `mon`, `bkp` |
+| device    | Hardware model | `opi3b`, `opi3bp`, `rpi3b+` |
+| id        | Unique index | `01`, `02` |
+
+Example:
+```
+anno-app-opi3b-01
+```
+
+---
+
+## Hardware and Roles
+
+| Hostname | Hardware | OS | Roles | Description |
+|----------|---------|----|-------|-------------|
+| anno-app-opi3b-01 | Orange Pi 3B | Armbian | app | Runs Cosmos Cloud, Docker apps: MonicaHQ, N8n, Jellyfin |
+| anno-nas-opi3bp-01 | Orange Pi 3B+ | Raspbian + OMV | nas | Storage node with two HDDs, file server |
+| anno-gw-mon-rpi3bp-01 | Raspberry Pi 3B+ | Raspbian | gw, mon | Gateway + monitoring stack, Cloudflare, Tailscale, Prometheus, Grafana, Uptime Kuma |
+
+---
+
+## Networking
+
+- **Tailscale Mesh VPN**: Provides secure encrypted connections between all nodes.  
+- **Cloudflare Tunnel (Cloudflared)**: Enables secure access to services without exposing ports to the public internet.  
+- **Gateway Node**: Central point for network routing and monitoring.  
+
+---
+
+## Monitoring Stack
+
+Monitoring runs on the **gateway node**:
+
+### Components
+
+- **Prometheus** → metrics collection from Node Exporters.  
+- **Grafana** → dashboards and visualizations.  
+- **Node Exporter** → lightweight agent on each node to expose system metrics.  
+- **Uptime Kuma** → monitor availability of services.  
+
+### Node Exporter Deployment
+
+Run on each node:
+
+```bash
+#!/bin/bash
+NODE_NAME=${1:-$(hostname)}
+mkdir -p /var/lib/node_exporter/textfile_collector
+
+docker run -d \
+  --name=node-exporter-$NODE_NAME \
+  --restart=always \
+  --net="host" \
+  --pid="host" \
+  -v "/:/host:ro,rslave" \
+  -v "/etc/localtime:/etc/localtime:ro" \
+  -v "/var/lib/node_exporter/textfile_collector:/host/var/lib/node_exporter/textfile_collector" \
+  --cap-add=SYS_TIME \
+  -l "com.annogrid.service=monitoring" \
+  -l "com.annogrid.component=node-exporter" \
+  -l "com.annogrid.node=$NODE_NAME" \
+  prom/node-exporter \
+  --path.rootfs=/host \
+  --collector.textfile.directory=/host/var/lib/node_exporter/textfile_collector \
+  --collector.filesystem.mount-points-exclude="^/(dev|proc|sys|var/lib/docker/.+|var/lib/containerd/.+)($|/)" \
+  --web.listen-address=:9100 \
+  --web.telemetry-path=/metrics \
+  --no-collector.wifi \
+  --collector.netclass.ignored-devices="^(lo|docker[0-9]+|br-.+|veth.+)$" \
+  --collector.netdev.device-exclude="^(lo|docker[0-9]+|br-.+|veth.+)$" \
+  --no-collector.hwmon
+```
+
+### Prometheus Configuration
+
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "anno-nodes"
+    static_configs:
+      - targets:
+          - "100.x.x.x:9100"  # anno-app-opi3b-01 (Tailscale IP)
+          - "100.x.x.x:9100"  # anno-nas-opi3bp-01
+          - "100.x.x.x:9100"  # anno-gw-mon-rpi3bp-01
+```
+
+---
+
+## Built With
+
+* Docker / Docker Compose
+* Prometheus
+* Grafana
+* Node Exporter
+* Uptime Kuma
+* Tailscale (mesh VPN)
+* Cloudflared (Cloudflare Tunnel)
+* Armbian / Raspbian
 
 ---
 

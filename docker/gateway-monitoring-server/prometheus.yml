@@ -5,6 +5,6 @@ scrape_configs:
   - job_name: "anno-nodes"
     static_configs:
       - targets:
-          - "100.123.0.5"  # anno-app-opi3b-01 (Tailscale IP)
-          - "100.101.173.125"  # anno-nas-opi3bp-01
-          - "100.75.28.18"  # anno-gw-mon-rpi3bp-01
+          - "100.123.0.5:9100"  # anno-app-opi3b-01 (Tailscale IP)
+          - "100.101.173.125:9100"  # anno-nas-opi3bp-01
+          - "100.75.28.18:9100"  # anno-gw-mon-rpi3bp-01

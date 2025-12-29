@@ -1,0 +1,13 @@
+services:
+  wppconnect-server:
+    build:
+      context: .
+    container_name: wppconnect-server
+    restart: unless-stopped
+    ports:
+      - "21465:21465"
+    volumes:
+      - ${HOME}/homelabservices/wppconnect:/home/node/app/userDataDir
+    environment:
+      - NODE_ENV=production
+      - PORT=21465
