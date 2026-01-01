@@ -1,0 +1,34 @@
+#!/usr/sbin/nft -f
+
+flush ruleset
+
+table inet filter {
+  chain input {
+    type filter hook input priority 0; policy drop;
+    ct state established,related accept
+    iifname "lo" accept
+    ip saddr 192.168.0.0/16 accept     # adjust to your LAN
+    tcp dport { 22, 9100 } accept      # ssh + node_exporter for testing
+    icmpv4 type echo-request accept
+    counter drop
+  }
+  chain forward {
+    type filter hook forward priority 0; policy drop;
+    ct state established,related accept
+    iifname "eth0" oifname "eth1" accept   # adjust as needed
+    counter drop
+  }
+  chain output {
+    type filter hook output priority 0; policy accept;
+  }
+}
+
+table ip nat {
+  chain prerouting {
+    type nat hook prerouting priority 0; policy accept;
+  }
+  chain postrouting {
+    type nat hook postrouting priority 100; policy accept;
+    oifname "eth0" masquerade
+  }
+}
