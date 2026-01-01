@@ -2,160 +2,187 @@
 #
 # gateway-node-setup.sh
 #
-# Idempotent installer for a Raspberry Pi "Gateway / Monitoring" node.
-# Safety-first defaults:
-#  - Does NOT enable networking services (hostapd, dnsmasq, etc).
+# Idempotent installer for Raspberry Pi Gateway / Monitoring Node.
+# Safety-first:
+#  - Does NOT enable networking services (hostapd, dnsmasq, etc) by default.
 #  - Holds openssh-server and openssh-client to avoid accidental SSH changes.
-#  - Requires MIN_FREE_MB on / (default 300 MB).
-#  - Installs node_exporter (Prometheus exporter) and a systemd unit.
+#  - Installs node_exporter (downloaded binary) and its systemd unit.
+#  - Installs packages incrementally so we don't run out of disk mid-install.
 #
-# Run as root: sudo ./gateway-node-setup.sh
+# Usage:
+#   sudo ./gateway-node-setup.sh            # default run (installs groups, skips heavy packages)
+#   sudo SKIP_HEAVY=1 ./gateway-node-setup.sh   # skip dnsmasq/hostapd
+#   sudo ENABLE_NODE_EXPORTER=1 ./gateway-node-setup.sh  # auto-enable node_exporter at the end
+#   sudo DRY_RUN=1 ./gateway-node-setup.sh    # print actions but don't change system
 #
 set -euo pipefail
 
+### Configuration (tweak if you must)
 LOGFILE="/var/log/gateway-setup.log"
-MIN_FREE_MB=300
-NODE_EXPORTER_VERSION="${NODE_EXPORTER_VERSION:-v1.7.2}"  # change if you want a different release
-NODE_EXPORTER_USER="node_exporter"
-NODE_EXPORTER_BIN="/usr/local/bin/node_exporter"
-GDIR="/etc/gateway-setup"
-PKGS_COMMON=(
-  iproute2
-  iptables
-  nftables
-  netfilter-persistent
-  iptables-persistent
-  dnsmasq
-  hostapd
-  bridge-utils
-  haveged
-  ufw
-  fail2ban
-  wireguard-tools
-  python3
-  python3-pip
-  python3-venv
-  git
-  curl
-  wget
-  vim
-  moreutils
-  htop
-  jq
-  rsync
-  logrotate
-  ethtool
-  dnsutils
-  tcpdump
-  tmux
-)
+MIN_FREE_MB=${MIN_FREE_MB:-300}
+NODE_EXPORTER_VERSION="${NODE_EXPORTER_VERSION:-v1.7.2}"
+NODE_EXPORTER_USER="${NODE_EXPORTER_USER:-node_exporter}"
+NODE_EXPORTER_BIN="${NODE_EXPORTER_BIN:-/usr/local/bin/node_exporter}"
+GDIR="${GDIR:-/etc/gateway-setup}"
+# env control
+DRY_RUN=${DRY_RUN:-0}
+SKIP_HEAVY=${SKIP_HEAVY:-0}       # if 1, skip dnsmasq & hostapd install
+ENABLE_NODE_EXPORTER=${ENABLE_NODE_EXPORTER:-0} # if 1, enable+start node_exporter at end
 
-# helper: log
-echo "==== Gateway setup started: $(date -u +"%Y-%m-%d %H:%M:%SZ") ====" | tee -a "$LOGFILE"
+# Package groups (incremental)
+PKG_GROUP_BASE=(tmux haveged curl wget git vim moreutils htop jq)
+PKG_GROUP_NET=(iproute2 nftables netfilter-persistent iptables-persistent)
+PKG_GROUP_MON=(rsync logrotate ethtool dnsutils tcpdump)
+PKG_GROUP_SECURITY=(ufw fail2ban wireguard-tools)
+PKG_GROUP_HEAVY=(dnsmasq hostapd bridge-utils)
+
+# helper: log (tee to logfile)
+log() {
+  echo "$@" | tee -a "$LOGFILE"
+}
 
 die() {
   echo "ERROR: $*" | tee -a "$LOGFILE" >&2
   exit 1
 }
 
+dryrun() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "[DRY RUN] $*"
+  else
+    eval "$@"
+  fi
+}
+
+# show usage
+usage() {
+  cat <<EOF
+gateway-node-setup.sh - idempotent gateway/monitoring installer
+
+Environment variables:
+  MIN_FREE_MB=300              Minimum free MB required before running
+  SKIP_HEAVY=1                 Skip heavy/optional packages (dnsmasq, hostapd)
+  ENABLE_NODE_EXPORTER=1       Enable+start node_exporter after install
+  DRY_RUN=1                    Do not change system; print actions only
+  NODE_EXPORTER_VERSION=...    Override node_exporter release (default: ${NODE_EXPORTER_VERSION})
+
+Examples:
+  sudo ./gateway-node-setup.sh
+  sudo SKIP_HEAVY=1 ENABLE_NODE_EXPORTER=1 ./gateway-node-setup.sh
+
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
 # must be root
 if [ "$(id -u)" -ne 0 ]; then
   die "This script must be run as root (sudo)."
 fi
 
-# ensure we have a tmux lifeline
+# ensure log file
+mkdir -p "$(dirname "$LOGFILE")"
+touch "$LOGFILE"
+log "==== Gateway setup started: $(date -u +"%Y-%m-%d %H:%M:%SZ") ===="
+
+# check tmux available / recommend
 if ! command -v tmux >/dev/null 2>&1; then
-  echo "Installing tmux for session safety..." | tee -a "$LOGFILE"
-  DEBIAN_FRONTEND=noninteractive apt-get update -y >>"$LOGFILE" 2>&1 || true
-  DEBIAN_FRONTEND=noninteractive apt-get install -y tmux >>"$LOGFILE" 2>&1 || die "Failed to install tmux"
+  log "tmux not found. Will install tmux early to provide a lifeline."
 fi
-
 if [ -z "${TMUX:-}" ]; then
-  echo "WARNING: It's recommended to run inside tmux. Start one with: tmux new -s gateway-install" | tee -a "$LOGFILE"
+  log "Warning: running outside tmux. Recommended: tmux new -s gateway-install"
 fi
 
-# disk space sanity
+# disk check
 FREE_KB=$(df --output=avail / | tail -n1)
 FREE_MB=$((FREE_KB/1024))
-echo "Free space on / : ${FREE_MB} MB" | tee -a "$LOGFILE"
+log "Free space on / : ${FREE_MB} MB (min required ${MIN_FREE_MB} MB)"
 if [ "$FREE_MB" -lt "$MIN_FREE_MB" ]; then
-  die "Free space <$MIN_FREE_MB MB on / — free space before proceeding."
+  die "Free space <$MIN_FREE_MB MB on / — please free space before running this script."
 fi
 
 # hold SSH packages to avoid accidental changes during install
-echo "Holding openssh-server and openssh-client to avoid accidental SSH changes" | tee -a "$LOGFILE"
-apt-mark hold openssh-server openssh-client >>"$LOGFILE" 2>&1 || true
+log "Holding openssh-server and openssh-client (will not allow upgrades during run)."
+dryrun "apt-mark hold openssh-server openssh-client >>\"$LOGFILE\" 2>&1 || true"
 
-# update & safe upgrade userland packages
-echo "Updating package lists..." | tee -a "$LOGFILE"
-DEBIAN_FRONTEND=noninteractive apt-get update -y >>"$LOGFILE" 2>&1 || die "apt-get update failed"
+# helper to apt-install one group at a time (idempotent)
+install_group() {
+  local -r NAME="$1"
+  shift
+  local -r PKGS=( "$@" )
+  log "Installing group: ${NAME} -> ${PKGS[*]}"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "[DRY RUN] apt-get update && apt-get install -y ${PKGS[*]}"
+    return 0
+  fi
+  apt-get update -y >>"$LOGFILE" 2>&1 || die "apt-get update failed"
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${PKGS[@]}" >>"$LOGFILE" 2>&1 || die "Failed to install group ${NAME}"
+  log "Group ${NAME} installed successfully."
+  # small cleanup after group install to reclaim space
+  apt-get clean >>"$LOGFILE" 2>&1 || true
+}
 
-echo "Performing safe upgrade (userland only)..." | tee -a "$LOGFILE"
-DEBIAN_FRONTEND=noninteractive apt-get upgrade -y >>"$LOGFILE" 2>&1 || die "apt-get upgrade failed"
+# install tmux early (safety)
+if ! command -v tmux >/dev/null 2>&1; then
+  install_group "base (tmux+utils)" "${PKG_GROUP_BASE[@]}"
+fi
 
-# install core packages
-echo "Installing packages: ${PKGS_COMMON[*]}" | tee -a "$LOGFILE"
-DEBIAN_FRONTEND=noninteractive apt-get install -y "${PKGS_COMMON[@]}" >>"$LOGFILE" 2>&1 || die "Package installation failed"
+# install remaining base utils (some may have been installed above)
+install_group "base (rest)" "${PKG_GROUP_BASE[@]}"
 
-# clean apt cache
-echo "Cleaning apt cache..." | tee -a "$LOGFILE"
-apt-get clean >>"$LOGFILE" 2>&1 || true
+# install networking primitives
+install_group "network primitives" "${PKG_GROUP_NET[@]}"
 
-# journald limits
-echo "Applying journald size limits..." | tee -a "$LOGFILE"
-mkdir -p /etc/systemd/journald.conf.d
+# install monitoring & admin utilities
+install_group "monitoring utils" "${PKG_GROUP_MON[@]}"
+
+# install security tools
+install_group "security tools" "${PKG_GROUP_SECURITY[@]}"
+
+# optionally install heavy packages (dnsmasq/hostapd)
+if [ "${SKIP_HEAVY}" -eq 1 ]; then
+  log "SKIP_HEAVY=1 set — skipping heavy/optional packages (dnsmasq, hostapd)."
+else
+  install_group "optional heavy (AP/DHCP)" "${PKG_GROUP_HEAVY[@]}"
+fi
+
+# apply journald limits
+log "Applying journald limits to keep logs small."
+dryrun "mkdir -p /etc/systemd/journald.conf.d"
 cat > /etc/systemd/journald.conf.d/00-gateway-size.conf <<'EOF'
 [Journal]
 SystemMaxUse=50M
 RuntimeMaxUse=50M
 EOF
 systemctl daemon-reload
-systemctl restart systemd-journald || echo "systemd-journald restart returned non-zero (non-fatal)" | tee -a "$LOGFILE"
+systemctl restart systemd-journald || log "journalctl restart returned non-fatal status"
 
-# ensure gateway setup dir and README
+# create gateway-setup dir and README
+log "Writing $GDIR/README"
 mkdir -p "$GDIR"
-cat > "$GDIR"/README <<'EOF'
+cat > "$GDIR/README" <<'EOF'
 Gateway / Monitoring Node - README
-----------------------------------
 
 This node has had gateway & monitoring packages installed, but NO network services
 were enabled or automatically started that may alter routing or drop SSH.
 
-Files and notes:
-- /var/log/gateway-setup.log  : installer log
-- /etc/gateway-setup/README    : this file
-- node_exporter systemd unit at /etc/systemd/system/node_exporter.service (if installed)
-- node_exporter binary at /usr/local/bin/node_exporter (if installed)
-
-Important safety notes:
-- APT package upgrades for SSH are held. To allow SSH upgrades later:
-    sudo apt-mark unhold openssh-server openssh-client
-
-- Do NOT enable or start hostapd, dnsmasq, or networking services until tested
-  locally or you have a recovery path (Tailscale, second SSH session, serial console).
-
-- Recommended test workflow for network changes:
-  1. Keep 2 SSH sessions open.
-  2. Make temporary rules and test (see nftables example in this README).
-  3. If OK, make persistent and enable.
-
-For detailed guidance and examples see the full README.md shipped alongside this script.
+See /var/log/gateway-setup.log for installer details.
 EOF
 
-# NODE_EXPORTER installation (downloaded binary)
+# node_exporter installer function
 install_node_exporter() {
   if [ -x "$NODE_EXPORTER_BIN" ]; then
-    echo "node_exporter already installed at $NODE_EXPORTER_BIN" | tee -a "$LOGFILE"
+    log "node_exporter already present at $NODE_EXPORTER_BIN"
     return 0
   fi
 
-  echo "Installing Prometheus node_exporter ${NODE_EXPORTER_VERSION}..." | tee -a "$LOGFILE"
-  TMPDIR=$(mktemp -d)
-  trap 'rm -rf "$TMPDIR"' RETURN
-
-  ARCH="$(dpkg --print-architecture)"   # typically armhf on RPi
+  # determine arch mapping
+  ARCH="$(dpkg --print-architecture || true)"
   case "$ARCH" in
-    armhf) ARCH_TAG="armv6l" ;;   # node_exporter uses armv6l for armhf builds
+    armhf) ARCH_TAG="armv7" ;;   # use armv7 tarball for armhf/armv7l Pis
     arm64) ARCH_TAG="arm64" ;;
     amd64) ARCH_TAG="amd64" ;;
     i386) ARCH_TAG="386" ;;
@@ -164,26 +191,33 @@ install_node_exporter() {
 
   TAR="node_exporter-${NODE_EXPORTER_VERSION}.linux-${ARCH_TAG}.tar.gz"
   URL="https://github.com/prometheus/node_exporter/releases/download/${NODE_EXPORTER_VERSION}/${TAR}"
+  log "Downloading node_exporter ${NODE_EXPORTER_VERSION} for ${ARCH} (archive: ${TAR})"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "[DRY RUN] curl -fsSLo /tmp/${TAR} ${URL}"
+    return 0
+  fi
 
-  echo "Downloading $URL" | tee -a "$LOGFILE"
+  TMPDIR="$(mktemp -d)"
+  trap 'rm -rf "$TMPDIR"' RETURN
   if ! curl -fsSLo "$TMPDIR/$TAR" "$URL"; then
-    echo "Failed to download node_exporter from $URL. Skipping node_exporter install." | tee -a "$LOGFILE"
+    log "Failed to download node_exporter from $URL — skipping node_exporter install."
     return 1
   fi
 
   tar -xzf "$TMPDIR/$TAR" -C "$TMPDIR"
-  BIN_SRC=$(find "$TMPDIR" -maxdepth 2 -type f -name node_exporter -print -quit)
+  BIN_SRC="$(find "$TMPDIR" -type f -name node_exporter -print -quit)"
   if [ -z "$BIN_SRC" ]; then
-    echo "node_exporter binary not found in archive. Skipping." | tee -a "$LOGFILE"
+    log "node_exporter binary not found in the downloaded archive — skipping."
     return 1
   fi
 
   install -m 0755 "$BIN_SRC" "$NODE_EXPORTER_BIN"
-  # create user and systemd unit
+  # create user
   if ! id -u "$NODE_EXPORTER_USER" >/dev/null 2>&1; then
     useradd --no-create-home --shell /usr/sbin/nologin --system "$NODE_EXPORTER_USER" || true
   fi
 
+  # write systemd unit
   cat > /etc/systemd/system/node_exporter.service <<EOF
 [Unit]
 Description=Prometheus Node Exporter
@@ -201,30 +235,28 @@ WantedBy=multi-user.target
 EOF
 
   systemctl daemon-reload
-  # Do NOT enable/start automatically; leave it disabled for manual start after testing
-  echo "node_exporter installed at ${NODE_EXPORTER_BIN}. To start manually:" | tee -a "$LOGFILE"
-  echo "  sudo systemctl start node_exporter" | tee -a "$LOGFILE"
-  echo "To enable at boot (only after you are ready):" | tee -a "$LOGFILE"
-  echo "  sudo systemctl enable --now node_exporter" | tee -a "$LOGFILE"
+  log "node_exporter installed at ${NODE_EXPORTER_BIN}. Manual start: sudo systemctl start node_exporter"
+  if [ "${ENABLE_NODE_EXPORTER:-0}" -eq 1 ]; then
+    systemctl enable --now node_exporter
+    log "node_exporter enabled and started."
+  else
+    log "node_exporter not enabled automatically (set ENABLE_NODE_EXPORTER=1 to enable)."
+  fi
 }
 
-install_node_exporter || echo "node_exporter installation step failed or skipped" | tee -a "$LOGFILE"
+# install node_exporter
+install_node_exporter || log "node_exporter installation failed or skipped"
 
-# summary: list installed packages from our list
-echo "Installed packages (from list):" | tee -a "$LOGFILE"
-for p in "${PKGS_COMMON[@]}"; do
-  dpkg -l "$p" >/dev/null 2>&1 && echo " - $p" | tee -a "$LOGFILE" || echo " - $p (not installed)" | tee -a "$LOGFILE"
-done
+# Summary of installed packages
+log "Installed packages summary (selected):"
+dpkg -l | awk '/^ii/ {print $2 " " $3}' | grep -E "$(printf '%s|' "${PKG_GROUP_BASE[@]}" "${PKG_GROUP_NET[@]}" "${PKG_GROUP_MON[@]}" "${PKG_GROUP_SECURITY[@]}" "${PKG_GROUP_HEAVY[@]}" | sed 's/|$//')" || true
 
 # Final free space check
 df -h / | tee -a "$LOGFILE"
 
-echo "==== Gateway setup finished: $(date -u +"%Y-%m-%d %H:%M:%SZ") ====" | tee -a "$LOGFILE"
-echo "NOTES:
- - The script DID NOT enable or change network services that might drop SSH.
- - Test network changes carefully and keep a second SSH session open.
- - To remove SSH hold: sudo apt-mark unhold openssh-server openssh-client
- - See /etc/gateway-setup/README and README.md for next steps and examples.
-" | tee -a "$LOGFILE"
-
-exit 0
+log "==== Gateway setup finished: $(date -u +"%Y-%m-%d %H:%M:%SZ") ===="
+log "Notes:
+ - The script DID NOT enable or start network services that could drop SSH (hostapd, dnsmasq).
+ - To allow SSH package upgrades later: sudo apt-mark unhold openssh-server openssh-client
+ - If DRY_RUN=1 was set, no changes were made.
+ - See $LOGFILE for details."
