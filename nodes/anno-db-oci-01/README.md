@@ -10,7 +10,7 @@
 
 Postgres/MariaDB/Redis/MinIO used to run as local containers on
 `anno-app-opi3bp-01` (two separate stacks: `docker/application-server/docker-compose.db.yml`
-and `docker/application-server/core-data/`). Both are now retired in favor of
+and `docker/core-data/`). Both are now retired in favor of
 this single node so the app server isn't also carrying DB I/O on a 2 GB
 Orange Pi with a microSD card as its only disk.
 
@@ -72,12 +72,14 @@ docker compose logs -f
 
 5. **Restore data** — see [`docs/guides/db-migration-to-oci.md`](../../docs/guides/db-migration-to-oci.md)
    for the full pg_dump/mysqldump/redis/minio migration procedure using the
-   SD-card extraction produced by `docker/application-server/restore/extract-sdcard-data.sh`.
+   SD-card extraction produced by `docker/restore/extract-sdcard-data.sh`.
 
 6. **Point every app stack at this node** — set `ANNOGRID_DB_HOST` /
-   `DB_POSTGRESDB_HOST` / `PG_DATABASE_URL` / `PEEKAPING_DB_HOST` etc. in each
-   `docker/application-server/*/.env` to this node's Tailscale IP or MagicDNS
-   name (`anno-db-oci-01.<your-tailnet>.ts.net`), then redeploy those stacks.
+   `DB_POSTGRESDB_HOST` / `PG_DATABASE_URL` / `PEEKAPING_DB_HOST` etc. in
+   `docker/application-server/.env` and each standalone stack's `.env`
+   (`docker/n8n/.env`, `docker/twenty-personal-crm/.env`,
+   `docker/peekaping/.env`) to this node's Tailscale IP or MagicDNS name
+   (`anno-db-oci-01.<your-tailnet>.ts.net`), then redeploy those stacks.
 
 ---
 
@@ -113,8 +115,9 @@ schedule — don't let the only DB backups live on the same disk as the DB.
 
 **Metrics**: `http://<tailscale-ip>:9100/metrics`
 **Prometheus scrape target**: `anno-db-oci-01:9100`, plus the existing
-`postgres-exporter` / `mysqld-exporter` in `docker/application-server/docker-compose.mon.yml`
-(already pointed at `${ANNOGRID_DB_HOST}`).
+`postgres-exporter` / `mysqld-exporter` in
+`docker/application-server/docker-compose.mon.yml` (already pointed at
+`${ANNOGRID_DB_HOST}`).
 
 ---
 

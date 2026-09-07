@@ -15,7 +15,7 @@ the Pi and reach the DBs remotely over Tailscale.
 
 This retires two DB stacks at once:
 - `docker/application-server/docker-compose.db.yml` (postgres, mariadb, redis on the `annogrid` network)
-- `docker/application-server/core-data/` (postgres, mariadb, redis, minio on `core-data_default`)
+- `docker/core-data/` (postgres, mariadb, redis, minio on `core-data_default`)
 
 Both compose files are now intentional no-ops (`services: {}`) — see the
 comment block at the top of each. `anno-db-oci-01/docker-compose.yml`
@@ -26,10 +26,16 @@ Repo changes already made as part of this migration:
 - `docker/application-server/docker-compose.app.yml` / `docker-compose.mon.yml` —
   DB hostnames changed from local container names (`postgres`, `mariadb`) to
   `${ANNOGRID_DB_HOST}`
-- `n8n/`, `twenty-personal-crm/`, `peekaping/` compose files — moved off the
-  now-retired `core-data_default` network onto the shared `annogrid` network;
-  DB host vars now point at the OCI node
+- `docker/n8n/`, `docker/twenty-personal-crm/`, `docker/peekaping/` compose
+  files — moved off the now-retired `core-data_default` network onto the
+  shared `annogrid` network; DB host vars now point at the OCI node
 - `docs/architecture/nodes-inventory.md` — new node entry
+- Separately, `docker/` was flattened: `core-data/`, `n8n/`, `tandoor/`,
+  `twenty-personal-crm/`, `obsidian/`, `homarr/`, `portainer/`, `peekaping/`,
+  `homepage/` moved out from under `application-server/` to be top-level
+  siblings under `docker/`; `docker/canary`, `docker/general`,
+  `docker/monitoring`, `docker/wppconnect` moved under `docker/shared/`. See
+  [`docker/README.md`](../../docker/README.md).
 
 What's **not** done automatically: provisioning the actual OCI VPS, moving
 the real data, rotating secrets, and redeploying each stack. That's this
@@ -42,7 +48,7 @@ document.
 - [ ] OCI account with a compartment/VCN ready
 - [ ] Tailscale account (same tailnet as the rest of AnnoGrid)
 - [ ] Confirmed which DB stack was actually live — check
-      `MANIFEST.txt` from `docker/application-server/restore/extract-sdcard-data.sh`
+      `MANIFEST.txt` from `docker/restore/extract-sdcard-data.sh`
       (or `docker volume ls` on the live Pi) to see whether
       `docker-compose.db.yml`'s volumes or `core-data/`'s volumes had real
       data. Likely only one did — n8n's compose file comments suggest
@@ -141,7 +147,7 @@ mc mirror old-minio/ new-minio/
 ```
 
 If you're restoring from the SD-card extraction instead of a live pg_dump,
-use `docker/application-server/restore/restore-to-new-host.sh` against
+use `docker/restore/restore-to-new-host.sh` against
 `nodes/anno-db-oci-01` first to get the raw volumes in place, then still take
 a fresh `pg_dumpall`/`mariadb-dump` on the new host and treat *that* as your
 real baseline going forward (see `RESTORE.md` §5 — raw volumes from a pulled
@@ -172,22 +178,22 @@ old local container names, using the new rotated passwords from Step 5:
 | Stack | File | Vars to update |
 |---|---|---|
 | core stack | `docker/application-server/.env` | `ANNOGRID_DB_HOST`, `POSTGRES_*`, `MYSQL_*` |
-| n8n | `docker/application-server/n8n/.env` | `DB_POSTGRESDB_HOST`, `DB_POSTGRESDB_PASSWORD` |
-| twenty-crm | `docker/application-server/twenty-personal-crm/.env` | `PG_DATABASE_URL`, `REDIS_URL` |
-| peekaping | `docker/application-server/peekaping/.env` | `PEEKAPING_DB_HOST`, `REDIS_HOST`, `REDIS_PASS` |
+| n8n | `docker/n8n/.env` | `DB_POSTGRESDB_HOST`, `DB_POSTGRESDB_PASSWORD` |
+| twenty-crm | `docker/twenty-personal-crm/.env` | `PG_DATABASE_URL`, `REDIS_URL` |
+| peekaping | `docker/peekaping/.env` | `PEEKAPING_DB_HOST`, `REDIS_HOST`, `REDIS_PASS` |
 
 Then redeploy each:
 ```bash
 cd docker/application-server
 docker compose -f docker-compose.app.yml up -d
 docker compose -f docker-compose.mon.yml up -d
-cd n8n && docker compose up -d
+cd ../n8n && docker compose up -d
 cd ../twenty-personal-crm && docker compose up -d
 cd ../peekaping && docker compose up -d
 ```
 
-`docker-compose.db.yml` and `core-data/docker-compose.yml` stay as their
-no-op stubs — nothing to run there anymore.
+`application-server/docker-compose.db.yml` and `core-data/docker-compose.yml`
+stay as their no-op stubs — nothing to run there anymore.
 
 ---
 

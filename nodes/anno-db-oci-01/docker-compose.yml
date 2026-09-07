@@ -1,8 +1,8 @@
 # anno-db-oci-01 — Centralized Database Server (OCI VPS)
 #
 # Consolidates Postgres, MariaDB, Redis, and MinIO for every AnnoGrid stack
-# that used to run its own local DB containers (docker-compose.db.yml,
-# docker/application-server/core-data/). See docs/guides/db-migration-to-oci.md.
+# that used to run its own local DB containers (docker/application-server/
+# docker-compose.db.yml, docker/core-data/). See docs/guides/db-migration-to-oci.md.
 #
 # SECURITY: every port below is bound to ${TAILSCALE_IP} only — never to
 # 0.0.0.0 — so these databases are unreachable except over the tailnet.

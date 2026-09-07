@@ -1,8 +1,37 @@
 # anno-app-opi3bp-01: Application Server Node
 
-**Hardware**: Orange Pi 3B+  
-**Role**: Run user-facing applications and web services  
+**Hardware**: Orange Pi 3B+
+**Role**: Run user-facing applications and web services
 **Status**: 🟢 Active
+
+---
+
+## What's deployed here
+
+This node runs the following stacks from [`../../docker/`](../../docker/README.md).
+Each is deployed independently — there's no single `docker-compose.yml` for
+"this node"; see each linked directory for its own `.env.example` and deploy
+instructions.
+
+| Stack | What it is |
+|---|---|
+| [`docker/application-server/`](../../docker/application-server/) | Core stack: monica, jellyfin, node-exporter/cadvisor/exporters (`docker-compose.app.yml` + `docker-compose.mon.yml`); `docker-compose.db.yml` is a retired no-op |
+| [`docker/n8n/`](../../docker/n8n/) | Workflow automation |
+| [`docker/tandoor/`](../../docker/tandoor/) | Recipe manager |
+| [`docker/twenty-personal-crm/`](../../docker/twenty-personal-crm/) | CRM |
+| [`docker/obsidian/`](../../docker/obsidian/) | CouchDB sync backend for Obsidian LiveSync |
+| [`docker/homarr/`](../../docker/homarr/) | Dashboard |
+| [`docker/portainer/`](../../docker/portainer/) | Docker management UI |
+| [`docker/peekaping/`](../../docker/peekaping/) | Uptime monitoring |
+| [`docker/homepage/`](../../docker/homepage/) | Dashboard (homepage.sh cron + stats.json) |
+| [`docker/core-data/`](../../docker/core-data/) | Retired no-op — was postgres/mariadb/redis/minio |
+
+**Databases**: PostgreSQL, MariaDB, Redis, and MinIO used to run locally here
+(two separate stacks — `application-server/docker-compose.db.yml` and
+`core-data/`, both now no-ops). They've moved to
+[`anno-db-oci-01`](../anno-db-oci-01/README.md) — see
+[`docs/guides/db-migration-to-oci.md`](../../docs/guides/db-migration-to-oci.md).
+Every stack above reaches that node's DBs over Tailscale.
 
 ---
 
@@ -11,104 +40,32 @@
 ```bash
 # SSH into node
 ssh pi@anno-app-opi3bp-01.local
-
-# Deploy services
-docker compose up -d
-
-# Check status
-docker compose ps
-
-# View logs
-docker compose logs -f
-```
-
----
-
-## Setup Instructions
-
-See [../../docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md) for detailed setup.
-
-### First-Time Setup (Automated)
-
-```bash
-# SSH into node
-ssh pi@anno-app-opi3bp-01.local
-
-# Run setup script
 cd /path/to/annogrid
-bash nodes/anno-app-opi3bp-01/setup.sh
-```
 
-### Manual Setup
+# Deploy the core stack
+cd docker/application-server
+cp .env.example .env   # fill in real values
+./setup.sh              # creates the shared `annogrid` network, deploys app.yml + mon.yml
 
-1. **Update System**
-   ```bash
-   sudo apt update && sudo apt upgrade -y
-   ```
-
-2. **Install Docker**
-   ```bash
-   curl -fsSL https://get.docker.com | sh
-   sudo usermod -aG docker pi
-   newgrp docker
-   ```
-
-3. **Deploy Node Exporter**
-   ```bash
-   docker run -d \
-     --name node-exporter \
-     --restart always \
-     --net host \
-     -v /:/host:ro \
-     prom/node-exporter:latest \
-     --path.rootfs=/host
-   ```
-
-4. **Deploy Application Services**
-   ```bash
-   docker compose up -d
-   ```
-
----
-
-## Configuration
-
-### Environment Variables
-
-Create `.env` file in this directory:
-
-```bash
-DOMAIN=yourdomain.com
-ENVIRONMENT=production
-LOG_LEVEL=info
-TIMEZONE=UTC
-```
-
-### Docker Compose Override
-
-Create `docker-compose.override.yml` for local customizations:
-
-```yaml
-version: '3.8'
-
-services:
-  app:
-    environment:
-      - DEBUG=false
-      - WORKERS=4
+# Deploy a standalone stack (repeat per stack you need)
+cd ../n8n
+cp .env.example .env
+docker compose up -d
 ```
 
 ---
 
-## Services Deployed
+## Recovery / Disaster Recovery
 
-See `docker-compose.yml` for current services.
+See [`../../docker/RESTORE.md`](../../docker/RESTORE.md) — covers recovering
+this node's data from a pulled SD card, including which volumes/bind-mounts
+belong to which stack above.
 
 ---
 
 ## Monitoring
 
-**Metrics**: http://localhost:9100/metrics  
+**Metrics**: http://localhost:9100/metrics
 **Prometheus Scrape**: `anno-app-opi3bp-01:9100`
 
 **Key Metrics to Monitor**:
@@ -119,56 +76,21 @@ See `docker-compose.yml` for current services.
 
 ---
 
-## Backups
-
-Critical volumes are automatically backed up to NAS node daily.
-
-```bash
-# Manual backup
-docker compose exec app tar czf /backup/app-$(date +%Y%m%d).tar.gz /app/data
-```
-
----
-
 ## Troubleshooting
 
-### Container Won't Start
-
 ```bash
-# Check logs
-docker compose logs app
+# Check logs for a given stack
+cd docker/<stack> && docker compose logs -f
 
 # Check resources
 docker stats
 
-# Restart container
-docker compose restart app
-```
+# Restart a stack
+cd docker/<stack> && docker compose restart
 
-### Out of Disk Space
-
-```bash
-# Check disk usage
+# Out of disk space
 df -h
-
-# Clean up Docker
 docker system prune -a
-
-# Remove old container logs
-docker compose logs --tail 0 -f 2>/dev/null | true
-```
-
-### High CPU Usage
-
-```bash
-# Check which containers use CPU
-docker stats
-
-# Check processes
-top
-
-# Restart problematic service
-docker compose restart service-name
 ```
 
 ---
@@ -176,42 +98,26 @@ docker compose restart service-name
 ## Useful Commands
 
 ```bash
-# View all services
+# View all containers on this node
+docker ps
+
+# Per-stack: view services, logs, restart
+cd docker/<stack>
 docker compose ps
-
-# Follow logs
 docker compose logs -f
-
-# Restart a service
-docker compose restart service-name
-
-# Stop all services
-docker compose down
-
-# Start services again
-docker compose up -d
-
-# Execute command in container
-docker compose exec app bash
-
-# View specific service logs
-docker compose logs app
-
-# Pull latest images
-docker compose pull
-
-# Update services
-docker compose up -d
+docker compose restart <service>
+docker compose pull && docker compose up -d
 ```
 
 ---
 
 ## Network Access
 
-**Local Network**: `http://anno-app-opi3bp-01.local`  
-**Tailscale**: `http://100.x.x.x` (replace with actual IP)  
-**External**: `https://app.yourdomain.com` (via Cloudflare)
+**Local Network**: `http://anno-app-opi3bp-01.local`
+**Tailscale**: `http://100.x.x.x` (replace with actual IP)
+**External**: via Cloudflare Tunnel (see gateway node)
 
 ---
 
-**For detailed documentation see**: [../../docs/architecture/nodes-inventory.md](../../docs/architecture/nodes-inventory.md)
+**For the full picture**: [`../../docs/architecture/nodes-inventory.md`](../../docs/architecture/nodes-inventory.md)
+**Service catalog**: [`../../docker/README.md`](../../docker/README.md)

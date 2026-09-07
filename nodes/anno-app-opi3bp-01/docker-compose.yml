@@ -3,6 +3,13 @@ version: '3.8'
 # Application Server Node (anno-app-opi3bp-01)
 # Orange Pi 3B+
 # Purpose: Run user-facing web services and applications
+#
+# UNUSED TEMPLATE — the real deployment lives in ../../docker/ (see
+# README.md in this directory for the current stack inventory).
+# node-exporter below duplicates the one already run by
+# docker/application-server/docker-compose.mon.yml. Kept only as a
+# starting point if you ever want a node-local compose file instead of
+# the per-service layout under docker/.
 
 services:
   # Node Exporter - Prometheus metrics collection
