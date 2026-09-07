@@ -22,13 +22,10 @@ services:
       homepage.description: Personal CRM
       homepage.server: anno-app
       homepage.container: annogrid-monica
-    depends_on:
-      mariadb:
-        condition: service_healthy
     environment:
       APP_KEY: ${MONICA_APP_KEY}
       APP_URL: ${MONICA_URL}
-      DB_HOST: mariadb
+      DB_HOST: ${ANNOGRID_DB_HOST}
       DB_DATABASE: monica
       DB_USERNAME: ${MYSQL_USER}
       DB_PASSWORD: ${MYSQL_PASSWORD}
@@ -51,14 +48,14 @@ services:
       homepage.description: Workflow automation
       homepage.server: anno-app
       homepage.container: annogrid-n8n
-    depends_on:
-      postgres:
-        condition: service_healthy
+    # NOTE: this n8n service looks superseded by the standalone stack in
+    # ../n8n/docker-compose.yml (external N8n-n8n_storage volume). Confirm
+    # which one is actually live before deploying both — see RESTORE.md.
     environment:
       N8N_BASIC_AUTH_USER: ${N8N_USER}
       N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD}
       DB_TYPE: postgresdb
-      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_HOST: ${ANNOGRID_DB_HOST}
       DB_POSTGRESDB_DATABASE: n8n
       DB_POSTGRESDB_USER: ${POSTGRES_USER}
       DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}

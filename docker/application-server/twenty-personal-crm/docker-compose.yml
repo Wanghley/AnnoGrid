@@ -2,8 +2,8 @@ name: twenty
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Twenty CRM — Server + Worker only.
-# Postgres and Redis live in the 'core-data' stack on the shared
-# core-data_default bridge network; no local DB/cache containers here.
+# Postgres and Redis run on anno-db-oci-01 (OCI VPS), reached over Tailscale
+# via PG_DATABASE_URL / REDIS_URL below — no local DB/cache containers here.
 # Image source: https://hub.docker.com/r/twentycrm/twenty  (arm64 ✓)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -25,7 +25,7 @@ services:
       # Public URL — must match what the browser resolves (Tailscale IP/port)
       SERVER_URL: ${SERVER_URL}
 
-      # Data layer (resolved by container name on core-data_default network)
+      # Data layer (anno-db-oci-01, over Tailscale)
       PG_DATABASE_URL: ${PG_DATABASE_URL}
       REDIS_URL:       ${REDIS_URL}
 
@@ -48,7 +48,7 @@ services:
       - twenty-storage:/app/packages/twenty-server/.local-storage
 
     networks:
-      - core-data_default
+      - annogrid
 
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://localhost:3000/healthz"]
@@ -103,7 +103,7 @@ services:
       - twenty-storage:/app/packages/twenty-server/.local-storage
 
     networks:
-      - core-data_default
+      - annogrid
 
     depends_on:
       twenty-server:
@@ -125,5 +125,5 @@ volumes:
       device: ${STORAGE_HOST_PATH:-./data/storage}
 
 networks:
-  core-data_default:
-    external: true
+  annogrid:
+    external: true  # Shared network (created by ../setup.sh); DB reached remotely over Tailscale

@@ -14,7 +14,7 @@ services:
       api:
         condition: service_healthy
     networks:
-      - core-data_network
+      - annogrid
     restart: unless-stopped
     deploy:
       resources:
@@ -29,7 +29,7 @@ services:
       api:
         condition: service_healthy
     networks:
-      - core-data_network
+      - annogrid
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:80 || exit 1"]
@@ -54,7 +54,7 @@ services:
       - DB_PASS=${PEEKAPING_DB_PASSWORD}
       - DB_NAME=${PEEKAPING_DB_NAME}
     networks:
-      - core-data_network
+      - annogrid
     restart: "no"
 
   api:
@@ -76,7 +76,7 @@ services:
       migrate:
         condition: service_completed_successfully
     networks:
-      - core-data_network
+      - annogrid
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO - http://localhost:8034/api/v1/health || exit 1"]
@@ -109,7 +109,7 @@ services:
       api:
         condition: service_healthy
     networks:
-      - core-data_network
+      - annogrid
     restart: unless-stopped
     deploy:
       resources:
@@ -136,7 +136,7 @@ services:
       api:
         condition: service_healthy
     networks:
-      - core-data_network
+      - annogrid
     restart: unless-stopped
     deploy:
       resources:
@@ -163,7 +163,7 @@ services:
       api:
         condition: service_healthy
     networks:
-      - core-data_network
+      - annogrid
     restart: unless-stopped
     deploy:
       resources:
@@ -172,6 +172,5 @@ services:
           cpus: "0.25"
 
 networks:
-  core-data_network:
-    name: core-data_default
-    external: true
+  annogrid:
+    external: true  # Shared network (created by ../setup.sh); DB reached remotely over Tailscale

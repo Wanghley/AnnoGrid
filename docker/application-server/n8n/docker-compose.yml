@@ -14,9 +14,9 @@ services:
     environment:
       <<: *shared-env
 
-      # ---- Database ----
+      # ---- Database (anno-db-oci-01, over Tailscale) ----
       DB_TYPE: postgresdb
-      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_HOST: ${DB_POSTGRESDB_HOST}
       DB_POSTGRESDB_PORT: 5432
       DB_POSTGRESDB_DATABASE: ${DB_POSTGRESDB_DATABASE}
       DB_POSTGRESDB_USER: ${DB_POSTGRESDB_USER}
@@ -55,7 +55,7 @@ services:
     volumes:
       - n8n_storage:/home/node/.n8n
     networks:
-      - core-data_network
+      - annogrid
     expose:
       - "5679"
     healthcheck:
@@ -90,7 +90,7 @@ services:
       NODE_OPTIONS: --max-old-space-size=512
       NODE_ENV: production
     networks:
-      - core-data_network
+      - annogrid
     deploy:
       resources:
         limits:
@@ -110,6 +110,5 @@ volumes:
     external: true  # Ties directly to your existing N8n volume
 
 networks:
-  core-data_network:
-    name: core-data_default
-    external: true  # Connects directly to the existing core database stack network
+  annogrid:
+    external: true  # Shared network (created by ../setup.sh); DB reached remotely over Tailscale

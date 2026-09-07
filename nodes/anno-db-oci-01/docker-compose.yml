@@ -1,0 +1,120 @@
+# anno-db-oci-01 — Centralized Database Server (OCI VPS)
+#
+# Consolidates Postgres, MariaDB, Redis, and MinIO for every AnnoGrid stack
+# that used to run its own local DB containers (docker-compose.db.yml,
+# docker/application-server/core-data/). See docs/guides/db-migration-to-oci.md.
+#
+# SECURITY: every port below is bound to ${TAILSCALE_IP} only — never to
+# 0.0.0.0 — so these databases are unreachable except over the tailnet.
+# Do NOT open 5432/3306/6379/9000/9001 in the OCI Security List / iptables.
+
+networks:
+  annogrid-db:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: annogrid_postgres_data
+  mariadb_data:
+    name: annogrid_mariadb_data
+  redis_data:
+    name: annogrid_redis_data
+  minio_data:
+    name: annogrid_minio_data
+  # mongodb_data:
+  #   name: annogrid_mongodb_data
+  # Uncomment only if the SD-card extraction's MANIFEST.txt showed real data
+  # in a mongo volume — the old core-data stack declared this volume but had
+  # no mongo service using it.
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: annogrid-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./configs/postgres/init-scripts:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${TAILSCALE_IP}:5432:5432"
+    networks:
+      - annogrid-db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mariadb:
+    image: mariadb:11-jammy
+    container_name: annogrid-mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./configs/mariadb/init-scripts:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${TAILSCALE_IP}:3306:3306"
+    networks:
+      - annogrid-db
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: annogrid-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD} --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${TAILSCALE_IP}:6379:6379"
+    networks:
+      - annogrid-db
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+
+  minio:
+    image: minio/minio:latest
+    container_name: annogrid-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "${TAILSCALE_IP}:9000:9000"
+      - "${TAILSCALE_IP}:9001:9001"
+    networks:
+      - annogrid-db
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: annogrid-db-node-exporter
+    restart: unless-stopped
+    pid: "host"
+    volumes:
+      - '/:/host:ro,rslave'
+      - '/proc:/host/proc:ro'
+      - '/sys:/host/sys:ro'
+    ports:
+      - "${TAILSCALE_IP}:9100:9100"
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containerd/.+)($$|/)'
+    networks:
+      - annogrid-db

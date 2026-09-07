@@ -1,8 +1,8 @@
 # AnnoGrid Node Inventory & Specifications
 
-**Last Updated**: April 2026  
+**Last Updated**: 2026-09-07  
 **Cluster Name**: AnnoGrid Production  
-**Location**: Home Infrastructure Lab  
+**Location**: Home Infrastructure Lab + OCI (hybrid)  
 
 ---
 
@@ -47,7 +47,12 @@ Sustained Download: ~900 Mbps
 **Current Services:**
 - Docker daemon (containerized workloads)
 - Node Exporter (metrics collection)
-- Application containers (as deployed)
+- Application containers (n8n, twenty-crm, monica, tandoor, obsidian, homarr, portainer, peekaping, homepage)
+
+> **2026-09-07**: PostgreSQL/MariaDB/Redis/MinIO moved off this node to
+> `anno-db-oci-01` (see below) — freed up microSD I/O and RAM. App
+> containers now reach the DB over Tailscale. See
+> [`docs/guides/db-migration-to-oci.md`](../guides/db-migration-to-oci.md).
 
 **Storage Devices:**
 ```
@@ -449,6 +454,73 @@ Tailscale:        Monitored via MagicDNS
 
 ---
 
+### 5. Database Server | anno-db-oci-01
+
+**Hardware Specifications:**
+```
+Device:           Oracle Cloud Infrastructure VPS
+CPU:              <OCPU count> (fill in from your OCI shape)
+RAM:              <GB> (fill in from your OCI shape)
+Storage:          <GB> OCI Block Volume
+Network:          OCI VCN + Tailscale overlay
+Power:            N/A (cloud-hosted)
+Connectivity:     Tailscale only (no public DB ports, no Cloudflare)
+Status:           🟡 Provisioning
+```
+
+**Network Configuration:**
+```
+Hostname:         anno-db-oci-01
+OCI Public IP:    <fill in> (SSH only — DB ports never exposed here)
+Tailscale IP:     100.x.x.x/24
+SSH Port:         22
+SSH Access:       ssh ubuntu@anno-db-oci-01.<your-tailnet>.ts.net
+```
+
+**Role:**
+Centralized PostgreSQL, MariaDB, Redis, and MinIO for every AnnoGrid app
+stack. Replaces two previously local DB stacks on `anno-app-opi3bp-01`
+(`docker-compose.db.yml` and `core-data/`, both now retired). See
+[`docs/guides/db-migration-to-oci.md`](../guides/db-migration-to-oci.md) and
+[`nodes/anno-db-oci-01/README.md`](../../nodes/anno-db-oci-01/README.md).
+
+**Current Services:**
+- Docker daemon
+- PostgreSQL (`annogrid_postgres_data`)
+- MariaDB (`annogrid_mariadb_data`)
+- Redis (`annogrid_redis_data`)
+- MinIO (`annogrid_minio_data`)
+- Node Exporter (metrics collection)
+
+**Security:**
+```
+All DB ports (5432, 3306, 6379, 9000, 9001) bound to the Tailscale IP only
+OCI Security List / NSG: allow only SSH (22) + Tailscale UDP (41641)
+No Cloudflare Tunnel — this node is never internet-facing for app traffic
+```
+
+**Backup Strategy:**
+```
+Daily pg_dumpall + mariadb-dump, shipped off-box to anno-nas-rpi3bp-01
+Redis: dump.rdb snapshot alongside DB dumps
+Retention: match anno-nas-rpi3bp-01's existing policy (4 weeks daily)
+```
+
+**Maintenance History:**
+```
+2026-09-07: Migrated from local anno-app-opi3bp-01 DB stacks
+```
+
+**OS & Runtime:**
+```
+OS:               Ubuntu 22.04 LTS
+Docker:           24.0+
+Docker Compose:   v2.x
+Tailscale:        Latest
+```
+
+---
+
 ## 🌐 Network Summary
 
 **Local Network (192.168.1.0/24)**
@@ -536,8 +608,9 @@ ssh ubuntu@anno-ai-jetson-orin-nano-01.local
 ssh pi@anno-nas-rpi3bp-01.local
 ssh pi@anno-gw-mon-rpi3bp-01.local
 
-# SSH (Tailscale - More Secure)
+# SSH (Tailscale - More Secure, and the ONLY way to reach anno-db-oci-01)
 ssh pi@100.x.x.x  # Use Tailscale IPs for remote access
+ssh ubuntu@anno-db-oci-01.<your-tailnet>.ts.net  # DB node — no local-network path exists
 
 # Monitoring (Local)
 http://anno-gw-mon-rpi3bp-01.local:9090      # Prometheus
@@ -557,6 +630,6 @@ tailscale ip -4   # Show Tailscale IP on any node
 
 ---
 
-**Last Updated**: 2026-04-21  
-**Next Review**: Q2 2026 (quarterly)
+**Last Updated**: 2026-09-07  
+**Next Review**: Q4 2026 (quarterly)
 

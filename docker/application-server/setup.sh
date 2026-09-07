@@ -41,13 +41,11 @@ mkdir -p configs/mongodb/init-scripts
 # 4. Deploy Stacks
 echo -e "${BLUE}🏗️  Deploying Stacks...${NC}"
 
-# Start Database Layer first
-echo -e "${YELLOW}📦 Deploying Database Layer...${NC}"
+# Database layer is now external (nodes/anno-db-oci-01/, reached over
+# Tailscale) — see docs/guides/db-migration-to-oci.md. docker-compose.db.yml
+# is kept as an intentional no-op so this line stays harmless.
+echo -e "${YELLOW}📦 Database layer is external (anno-db-oci-01) — skipping local deploy.${NC}"
 docker compose -f docker-compose.db.yml up -d
-
-# Wait for databases to initialize (optional but helpful)
-echo -e "Waiting 5 seconds for database initialization..."
-sleep 5
 
 # Start Application Layer
 echo -e "${YELLOW}📦 Deploying Application Layer...${NC}"
