@@ -37,6 +37,13 @@ volumes:
 
 services:
   postgres:
+    # Pin the major version to match whatever's actually in postgres_data —
+    # Postgres data directories are NOT portable across major versions.
+    # 18+ images manage their own version-specific subdir (e.g.
+    # 18/docker/) under this mount rather than using it directly as PGDATA —
+    # do not mount this at .../postgresql/data, only at .../postgresql
+    # itself, or the 18+ entrypoint will refuse to start
+    # (see https://github.com/docker-library/postgres/pull/1259).
     image: postgres:18-alpine
     container_name: core-data-postgres
     restart: unless-stopped
