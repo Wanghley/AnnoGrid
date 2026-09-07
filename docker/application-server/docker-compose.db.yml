@@ -2,10 +2,11 @@
 # DEPRECATED — local DB layer retired 2026-09-07
 #
 # postgres / mariadb / redis moved off anno-app-opi3bp-01 to a centralized
-# DB host: nodes/anno-db-oci-01/ (OCI VPS, reachable over Tailscale).
+# DB host: docker/core-data/, deployed on anno-db-oci-01 (OCI VPS, reachable
+# over Tailscale).
 #
 # See docs/guides/db-migration-to-oci.md for the migration, and
-# nodes/anno-db-oci-01/docker-compose.yml for where these services run now.
+# docker/core-data/docker-compose.yml for where these services run now.
 #
 # Kept as an intentional no-op (rather than deleted) so existing
 # `manage.sh` / `setup.sh` invocations that reference this file don't

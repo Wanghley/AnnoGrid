@@ -37,7 +37,7 @@ Two layers, both under `docker/`:
 
 | Directory | Service | Data location | Notes |
 |---|---|---|---|
-| `core-data/` | *(retired — see note above; was postgres, mariadb, redis, minio)* | historically `postgres_data`, `mariadb_data`, `mongo_data`, `redis_data`, `minio_data` | A **second**, separate DB stack from `docker-compose.db.yml` — if recovering a pre-migration image, confirm which one was actually populated (see §2). |
+| `core-data/` | *(no longer deployed on this node — see note above; local volumes here were postgres, mariadb, redis, minio)* | historically `core-data_postgres_data`, `core-data_mariadb_data`, `core-data_redis_data`, `core-data_minio_data` on this card | A **second**, separate DB stack from `docker-compose.db.yml`. Confirmed live: this one was populated, `docker-compose.db.yml`'s `annogrid_*` volumes were not. `docker/core-data/` in the repo now holds the *current* stack instead — it just runs on `anno-db-oci-01`, not here. |
 | `n8n/` | n8n, n8n-runner | external volume `N8n-n8n_storage` → `/home/node/.n8n` | Current n8n deployment (DB now on `anno-db-oci-01`, not in this volume). `N8N_ENCRYPTION_KEY` in its `.env` is load-bearing — losing it makes all stored credentials unreadable. |
 | `twenty-personal-crm/` | twenty-server, twenty-worker | bind mount `./data/storage` → `.local-storage` | DB/Redis on `anno-db-oci-01`. |
 | `tandoor/` | web_recipes | volume `staticfiles` + bind mount `./mediafiles` | Recipe images/uploads are in `mediafiles`. |
@@ -47,14 +47,14 @@ Two layers, both under `docker/`:
 | `peekaping/` | gateway, web, api, migrate, producer, worker, ingester | none (stateless; DB on `anno-db-oci-01`) | Just needs `.env` restored. |
 | `homepage/` | homepage | bind mounts `./config`, `./public` | Dashboard config, low priority. |
 
-> ⚠️ **`n8n` and `postgres`/`mariadb` appear twice** in a pre-migration image
-> (once in the core stack, once in `core-data/` and `n8n/`). Compose file
-> comments ("Ties to your existing N8n volume", "Postgres and Redis live in
-> the core-data stack") suggest `core-data/` + `n8n/` were the **live**
-> deployment and `docker-compose.app.yml`'s n8n / `docker-compose.db.yml` may
-> have been legacy or partially superseded. Don't guess — the extraction
-> script below reads real volume names off the card instead of trusting
-> either compose file, so this gets resolved automatically in step 2.
+> ✅ **Resolved**: `n8n` and `postgres`/`mariadb` appear twice in a
+> pre-migration image (once in the core stack, once in `core-data/` and
+> `n8n/`). Confirmed from a real card: `core-data_*` volumes had data,
+> `annogrid_*` volumes (from `docker-compose.db.yml`) did not — so
+> `core-data/` + `n8n/` were the live deployment, and `docker-compose.app.yml`'s
+> n8n / `docker-compose.db.yml` were unused. If recovering a different card,
+> don't assume the same — the extraction script below reads real volume names
+> off the card instead of trusting either compose file.
 
 ---
 
@@ -162,8 +162,8 @@ anything you can't afford to lose, prefer a logical dump once the restored DB
 container is up and healthy, rather than trusting the raw volume long-term:
 
 ```bash
-docker exec annogrid-postgres pg_dumpall -U "$POSTGRES_USER" > postgres_full_dump.sql
-docker exec annogrid-mariadb sh -c 'mariadb-dump -u root -p"$MYSQL_ROOT_PASSWORD" --all-databases' > mariadb_full_dump.sql
+docker exec core-data-postgres pg_dumpall -U "$POSTGRES_USER" > postgres_full_dump.sql
+docker exec core-data-mariadb sh -c 'mariadb-dump -u root -p"$MYSQL_ROOT_PASSWORD" --all-databases' > mariadb_full_dump.sql
 ```
 
 Keep these dumps alongside the volume tarballs going forward as your actual

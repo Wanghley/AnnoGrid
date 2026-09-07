@@ -24,12 +24,12 @@ instructions.
 | [`docker/portainer/`](../../docker/portainer/) | Docker management UI |
 | [`docker/peekaping/`](../../docker/peekaping/) | Uptime monitoring |
 | [`docker/homepage/`](../../docker/homepage/) | Dashboard (homepage.sh cron + stats.json) |
-| [`docker/core-data/`](../../docker/core-data/) | Retired no-op — was postgres/mariadb/redis/minio |
 
 **Databases**: PostgreSQL, MariaDB, Redis, and MinIO used to run locally here
-(two separate stacks — `application-server/docker-compose.db.yml` and
-`core-data/`, both now no-ops). They've moved to
-[`anno-db-oci-01`](../anno-db-oci-01/README.md) — see
+(two separate stacks — `application-server/docker-compose.db.yml`, now a
+retired no-op, and `docker/core-data/`'s own pre-migration local deployment).
+`docker/core-data/` isn't deployed on this node anymore at all — it now runs
+exclusively on [`anno-db-oci-01`](../anno-db-oci-01/README.md); see
 [`docs/guides/db-migration-to-oci.md`](../../docs/guides/db-migration-to-oci.md).
 Every stack above reaches that node's DBs over Tailscale.
 

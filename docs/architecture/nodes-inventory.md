@@ -478,18 +478,20 @@ SSH Access:       ssh ubuntu@anno-db-oci-01.<your-tailnet>.ts.net
 ```
 
 **Role:**
-Centralized PostgreSQL, MariaDB, Redis, and MinIO for every AnnoGrid app
-stack. Replaces two previously local DB stacks on `anno-app-opi3bp-01`
-(`docker-compose.db.yml` and `core-data/`, both now retired). See
+Runs [`docker/core-data/`](../../docker/core-data/README.md) — centralized
+PostgreSQL, MariaDB, Redis, and MinIO for every AnnoGrid app stack. Replaces
+two previously local DB stacks on `anno-app-opi3bp-01`
+(`application-server/docker-compose.db.yml`, retired, and `core-data/`'s own
+pre-migration local deployment). See
 [`docs/guides/db-migration-to-oci.md`](../guides/db-migration-to-oci.md) and
 [`nodes/anno-db-oci-01/README.md`](../../nodes/anno-db-oci-01/README.md).
 
 **Current Services:**
 - Docker daemon
-- PostgreSQL (`annogrid_postgres_data`)
-- MariaDB (`annogrid_mariadb_data`)
-- Redis (`annogrid_redis_data`)
-- MinIO (`annogrid_minio_data`)
+- PostgreSQL (`postgres_data`)
+- MariaDB (`mariadb_data`)
+- Redis (`redis_data`)
+- MinIO (`minio_data`)
 - Node Exporter (metrics collection)
 
 **Security:**
