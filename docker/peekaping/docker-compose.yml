@@ -173,4 +173,4 @@ services:
 
 networks:
   annogrid:
-    external: true  # Shared network (created by ../setup.sh); DB reached remotely over Tailscale
+    external: true  # Shared network (created by ../application-server/setup.sh); DB reached remotely over Tailscale

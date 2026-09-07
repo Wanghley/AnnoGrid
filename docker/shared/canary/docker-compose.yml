@@ -12,7 +12,7 @@ services:
       - "--storage.tsdb.retention.time=7d"
     volumes:
       - "/home/wanghley/homelabservices/prometheus:/prometheus"
-      - "/home/wanghley/AnnoNAS/docker/canary/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - "/home/wanghley/AnnoNAS/docker/shared/canary/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
     networks:
       - monitoring
 

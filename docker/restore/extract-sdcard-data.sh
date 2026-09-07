@@ -9,11 +9,12 @@
 # It does NOT trust hardcoded volume names — compose project names vary
 # with COMPOSE_PROJECT_NAME / checkout directory name at deploy time.
 # Instead it enumerates whatever actually exists under
-# <rootfs>/var/lib/docker/volumes/ and <rootfs>/var/lib/docker/volumes/*
-# and tags each by keyword match against known services (postgres, n8n,
-# core-data, etc), plus locates the live repo checkout (by finding
-# docker-compose.db.yml) to pull .env files and gitignored bind-mount dirs
-# (homarr/data, obsidian/couchdb-data, tandoor/mediafiles, twenty storage).
+# <rootfs>/var/lib/docker/volumes/ and tags each by keyword match against
+# known services (postgres, n8n, core-data, etc), plus locates the live
+# repo checkout (by finding docker/application-server/docker-compose.db.yml)
+# to pull every stack's .env file and gitignored bind-mount dirs (n8n,
+# tandoor, twenty-personal-crm, obsidian, homarr, homepage all live as
+# siblings of application-server/ under docker/, not nested inside it).
 #
 # Usage:
 #   sudo ./extract-sdcard-data.sh <mounted-rootfs-path> <output-dir>
@@ -41,14 +42,14 @@ fi
 mkdir -p "$OUT/docker_volumes" "$OUT/env_files" "$OUT/bind_mounts" "$OUT/configs"
 
 echo "🔎 Locating the AnnoGrid checkout on the image..."
-APP_SERVER_DIR=""
+DOCKER_DIR=""
 COMPOSE_HIT="$(find "$ROOTFS" -maxdepth 10 -type f -name "docker-compose.db.yml" 2>/dev/null | grep '/application-server/' | head -n1 || true)"
 if [ -n "$COMPOSE_HIT" ]; then
-    APP_SERVER_DIR="$(dirname "$COMPOSE_HIT")"
-    echo "   ✅ Found: $APP_SERVER_DIR"
+    DOCKER_DIR="$(dirname "$(dirname "$COMPOSE_HIT")")"   # .../docker (parent of application-server/)
+    echo "   ✅ Found: $DOCKER_DIR"
 else
-    echo "   ⚠️  Could not auto-locate docker/application-server checkout on the image."
-    echo "      .env files and bind-mount data (homarr, obsidian, tandoor, twenty) will be skipped."
+    echo "   ⚠️  Could not auto-locate the docker/ checkout on the image."
+    echo "      .env files and bind-mount data (n8n, tandoor, twenty-crm, obsidian, homarr, homepage) will be skipped."
     echo "      You can pass its path manually and re-run just that section."
 fi
 
@@ -99,16 +100,16 @@ else
 fi
 
 # ── 2. .env files for every stack (secrets + config live ONLY here) ──
-if [ -n "$APP_SERVER_DIR" ]; then
+if [ -n "$DOCKER_DIR" ]; then
     echo "🔑 Collecting .env files..."
     echo >> "$MANIFEST"
     echo "== .env files recovered ==" >> "$MANIFEST"
     while IFS= read -r -d '' envfile; do
-        rel="${envfile#"$APP_SERVER_DIR"/}"
+        rel="${envfile#"$DOCKER_DIR"/}"
         dest="$OUT/env_files/${rel//\//__}"
         cp "$envfile" "$dest"
         echo "  - $rel" | tee -a "$MANIFEST"
-    done < <(find "$APP_SERVER_DIR" -maxdepth 3 -type f -name ".env" -print0 2>/dev/null)
+    done < <(find "$DOCKER_DIR" -maxdepth 3 -type f -name ".env" -print0 2>/dev/null)
 
     # ── 3. gitignored bind-mount data directories ──
     echo "📁 Collecting bind-mount data directories..."
@@ -122,7 +123,7 @@ if [ -n "$APP_SERVER_DIR" ]; then
         "twenty-personal-crm/data" \
         "homepage/config" \
         "homepage/public"; do
-        src="$APP_SERVER_DIR/$rel"
+        src="$DOCKER_DIR/$rel"
         if [ -d "$src" ]; then
             dest="$OUT/bind_mounts/${rel//\//__}"
             mkdir -p "$dest"
@@ -131,9 +132,9 @@ if [ -n "$APP_SERVER_DIR" ]; then
     done
 
     # ── 4. DB init-script configs (postgres/mariadb custom init, peekaping nginx) ──
-    if [ -d "$APP_SERVER_DIR/configs" ]; then
-        rsync -aAX "$APP_SERVER_DIR/configs"/ "$OUT/configs"/ 2>/dev/null
-        echo "  - configs/ (postgres/mariadb init scripts)" | tee -a "$MANIFEST"
+    if [ -d "$DOCKER_DIR/application-server/configs" ]; then
+        rsync -aAX "$DOCKER_DIR/application-server/configs"/ "$OUT/configs"/ 2>/dev/null
+        echo "  - application-server/configs/ (postgres/mariadb init scripts)" | tee -a "$MANIFEST"
     fi
 fi
 

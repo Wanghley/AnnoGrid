@@ -8,7 +8,7 @@
 #
 # The core-data_default network this stack used to own has been retired
 # too — n8n/, twenty-personal-crm/, and peekaping/ now join the existing
-# `annogrid` external network (created by ../setup.sh) instead, since they
+# `annogrid` external network (created by ../application-server/setup.sh) instead, since they
 # no longer need to share a Docker network with the DB containers to reach
 # a remote host over Tailscale.
 #

@@ -1,4 +1,4 @@
-# /home/wanghley/AnnoNAS/docker/canary/prometheus.yml
+# /home/wanghley/AnnoNAS/docker/shared/canary/prometheus.yml
 
 global:
   scrape_interval: 15s

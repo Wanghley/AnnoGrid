@@ -4,7 +4,7 @@
 # Queries Prometheus + Docker API + Jellyfin → writes public/stats.json
 #
 # Cron (every 5 min on anno-app):
-#   */5 * * * * /home/pi/AnnoGrid/docker/application-server/homepage/homepage.sh
+#   */5 * * * * /home/pi/AnnoGrid/docker/homepage/homepage.sh
 #==============================================================================
 
 #==============================================================================
