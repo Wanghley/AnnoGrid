@@ -1,15 +1,16 @@
 # core-data — Centralized Database Server
 #
-# Consolidates Postgres, MariaDB, Redis, and MinIO for every AnnoGrid stack
-# that used to run its own local DB containers (docker/application-server/
-# docker-compose.db.yml on anno-app-opi3bp-01, and this stack's own
+# Consolidates Postgres, MariaDB, Redis, CouchDB, and MinIO for every
+# AnnoGrid stack that used to run its own local DB containers
+# (docker/application-server/docker-compose.db.yml on anno-app-opi3bp-01,
+# docker/obsidian/'s own local CouchDB, and this stack's own
 # pre-2026-09-07 local deployment). Now deployed on anno-db-oci-01 (OCI VPS)
 # — see docs/guides/db-migration-to-oci.md and
 # ../../nodes/anno-db-oci-01/README.md for that node's specifics.
 #
 # SECURITY: every port below is bound to ${TAILSCALE_IP} only — never to
 # 0.0.0.0 — so these databases are unreachable except over the tailnet.
-# Do NOT open 5432/3306/6379/9000/9001 in the host's cloud firewall.
+# Do NOT open 5432/3306/6379/5984/9000/9001 in the host's cloud firewall.
 
 name: core-data
 
@@ -29,6 +30,8 @@ volumes:
     name: redis_data
   minio_data:
     name: minio_data
+  couchdb_data:
+    name: couchdb_data
   # mongodb_data:
   #   name: mongodb_data
   # Uncomment only if an SD-card extraction's MANIFEST.txt showed real data
@@ -104,6 +107,33 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
+
+  couchdb:
+    image: couchdb:latest
+    container_name: core-data-couchdb
+    restart: unless-stopped
+    # Matches the data directory's expected ownership.
+    user: 5984:5984
+    # No COUCHDB_USER/COUCHDB_PASSWORD here on purpose: the mounted
+    # local.d/docker.ini already carries a real [admins] entry with a
+    # pre-hashed password from the original deployment. The official image
+    # writes COUCHDB_USER/COUCHDB_PASSWORD as plaintext into this same file
+    # on every start, which would collide with (or clobber) that entry.
+    # To rotate the admin password later, do it via the CouchDB HTTP API
+    # (PUT /_node/_local/_config/admins/<user>) after this is up, not here
+    # — and remember Obsidian LiveSync's client config needs updating too.
+    volumes:
+      - couchdb_data:/opt/couchdb/data
+      - ./configs/couchdb/local.d:/opt/couchdb/etc/local.d:ro
+    ports:
+      - "${TAILSCALE_IP}:5984:5984"
+    networks:
+      - core-data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5984/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: minio/minio:latest

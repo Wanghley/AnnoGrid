@@ -19,11 +19,11 @@ are gitignored on purpose (see root `.gitignore`).
 docker/
 ├── application-server/   # Core AnnoGrid stack: app.yml + mon.yml + setup.sh/manage.sh
 │                          # (db.yml is a retired no-op — DBs moved to anno-db-oci-01)
-├── core-data/             # postgres/mariadb/redis/minio — deployed on anno-db-oci-01
+├── core-data/             # postgres/mariadb/redis/couchdb/minio — deployed on anno-db-oci-01
 ├── n8n/                   # Workflow automation
 ├── tandoor/               # Recipe manager
 ├── twenty-personal-crm/   # CRM
-├── obsidian/               # CouchDB sync backend for Obsidian LiveSync
+├── obsidian/               # DEPRECATED no-op — couchdb moved into core-data/
 ├── homarr/                 # Dashboard
 ├── portainer/               # Docker management UI
 ├── peekaping/               # Uptime monitoring
@@ -54,6 +54,8 @@ base `docker-compose.app.yml` / `docker-compose.mon.yml` files, `setup.sh` /
 as a retired no-op — its services moved into `core-data/`, which now runs on
 `anno-db-oci-01` instead of `anno-app-opi3bp-01` — see
 [`../docs/guides/db-migration-to-oci.md`](../docs/guides/db-migration-to-oci.md).
+`obsidian/` is retired the same way (2026-09-08) — its couchdb also moved
+into `core-data/`.
 
 `docker/canary`, `docker/general`, `docker/monitoring`, `docker/wppconnect`
 don't map cleanly to one node, so they're grouped under `shared/` instead of
