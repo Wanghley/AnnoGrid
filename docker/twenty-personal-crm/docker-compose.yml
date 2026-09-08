@@ -48,7 +48,7 @@ services:
       - twenty-storage:/app/packages/twenty-server/.local-storage
 
     networks:
-      - annogrid
+      - shared
 
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://localhost:3000/healthz"]
@@ -103,7 +103,7 @@ services:
       - twenty-storage:/app/packages/twenty-server/.local-storage
 
     networks:
-      - annogrid
+      - shared
 
     depends_on:
       twenty-server:
@@ -125,5 +125,5 @@ volumes:
       device: ${STORAGE_HOST_PATH:-./data/storage}
 
 networks:
-  annogrid:
+  shared:
     external: true  # Shared network (created by ../application-server/setup.sh); DB reached remotely over Tailscale

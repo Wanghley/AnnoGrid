@@ -19,9 +19,9 @@ services:
       - DOCKER_PORTS=${DOCKER_PORTS:-}
     networks:
       - default
-      - annogrid
+      - shared
 
 networks:
-  annogrid:
-    name: annogrid
+  shared:
+    name: shared
     external: true

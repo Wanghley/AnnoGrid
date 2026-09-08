@@ -32,13 +32,13 @@ services:
       homepage.container: portainer
     networks:
       - default
-      - annogrid
+      - shared
 volumes:
   portainer_data:
     name: portainer_data
 networks:
   default:
     name: portainer_network
-  annogrid:
-    name: annogrid
+  shared:
+    name: shared
     external: true

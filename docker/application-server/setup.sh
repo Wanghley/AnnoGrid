@@ -22,7 +22,7 @@ if [ ! -f .env ]; then
 fi
 
 # 2. Create Docker Network if it doesn't exist
-NETWORK_NAME="annogrid"
+NETWORK_NAME="shared"
 if [ ! "$(docker network ls | grep $NETWORK_NAME)" ]; then
     echo -e "${YELLOW}🌐 Creating shared network: $NETWORK_NAME...${NC}"
     docker network create --subnet=172.20.0.0/24 $NETWORK_NAME

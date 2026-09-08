@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Ensure shared network exists
-if ! docker network inspect annogrid >/dev/null 2>&1; then
-    docker network create --subnet=172.20.0.0/24 annogrid
+if ! docker network inspect shared >/dev/null 2>&1; then
+    docker network create --subnet=172.20.0.0/24 shared
 fi
 
 COMPOSE_FILES="-f docker-compose.db.yml -f docker-compose.app.yml -f docker-compose.mon.yml"

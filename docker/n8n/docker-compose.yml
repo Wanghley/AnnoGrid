@@ -58,7 +58,7 @@ services:
     volumes:
       - n8n_storage:/home/node/.n8n
     networks:
-      - annogrid
+      - shared
     expose:
       - "5679"
     healthcheck:
@@ -93,7 +93,7 @@ services:
       NODE_OPTIONS: --max-old-space-size=512
       NODE_ENV: production
     networks:
-      - annogrid
+      - shared
     deploy:
       resources:
         limits:
@@ -113,5 +113,5 @@ volumes:
     external: true  # Ties directly to your existing N8n volume
 
 networks:
-  annogrid:
+  shared:
     external: true  # Shared network (created by ../application-server/setup.sh); DB reached remotely over Tailscale

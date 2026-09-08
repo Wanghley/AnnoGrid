@@ -25,7 +25,7 @@ card) — the repo only holds the compose "recipes".
 
 Two layers, both under `docker/`:
 
-**Core stack** (managed together via `docker/application-server/setup.sh` / `manage.sh`, network `annogrid`):
+**Core stack** (managed together via `docker/application-server/setup.sh` / `manage.sh`, network `shared`):
 
 | File | Services | Data |
 |---|---|---|
@@ -33,7 +33,7 @@ Two layers, both under `docker/`:
 | `application-server/docker-compose.app.yml` | monica, n8n *(legacy — see note)*, jellyfin | `monica_data`, `n8n_data`, `jellyfin_config`, `jellyfin_cache` (named volumes) |
 | `application-server/docker-compose.mon.yml` | node-exporter, cadvisor, postgres-exporter, mysqld-exporter | stateless (no persistent data of its own) |
 
-**Standalone stacks** (each deployed independently, flat siblings under `docker/`, on the shared `annogrid` network):
+**Standalone stacks** (each deployed independently, flat siblings under `docker/`, on the shared `shared` docker network):
 
 | Directory | Service | Data location | Notes |
 |---|---|---|---|
@@ -113,11 +113,11 @@ It intentionally stops there; the rest is a manual, reviewed step:
    ```bash
    # If recovering a pre-migration image and restoring the DB layer locally
    # (normally unnecessary now — DBs live on anno-db-oci-01):
-   docker network create --subnet=172.20.0.0/24 annogrid
+   docker network create --subnet=172.20.0.0/24 shared
    cd docker/application-server && docker compose -f docker-compose.app.yml up -d
    docker compose -f docker-compose.mon.yml up -d
 
-   # Standalone stacks (siblings under docker/, all on the annogrid network):
+   # Standalone stacks (siblings under docker/, all on the shared network):
    cd ../n8n && docker compose up -d
    cd ../twenty-personal-crm && docker compose up -d
    cd ../peekaping && docker compose up -d

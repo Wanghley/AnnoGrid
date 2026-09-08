@@ -14,7 +14,7 @@
 # DB_HOST-style vars at the OCI node instead of these container names.
 # ═══════════════════════════════════════════════════════════════
 networks:
-  annogrid:
+  shared:
     external: true
 
 services: {}

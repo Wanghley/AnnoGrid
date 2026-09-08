@@ -14,7 +14,7 @@ containers (n8n, twenty-crm, monica, tandoor, peekaping, etc.) stay put on
 the Pi and reach the DBs remotely over Tailscale.
 
 This retires two local DB stacks on the Pi:
-- `docker/application-server/docker-compose.db.yml` (postgres, mariadb, redis on the `annogrid` network) — now a no-op stub, permanently retired.
+- `docker/application-server/docker-compose.db.yml` (postgres, mariadb, redis on the `shared` network) — now a no-op stub, permanently retired.
 - `docker/core-data/`'s **pre-migration** local deployment (postgres, mariadb, redis, minio on `core-data_default`)
 
 > **Note on `docker/core-data/`**: this path briefly held a no-op stub right
@@ -32,7 +32,7 @@ Repo changes already made as part of this migration:
   `${ANNOGRID_DB_HOST}`
 - `docker/n8n/`, `docker/twenty-personal-crm/`, `docker/peekaping/` compose
   files — moved off the now-retired `core-data_default` network onto the
-  shared `annogrid` network; DB host vars now point at the OCI node
+  `shared` docker network; DB host vars now point at the OCI node
 - `docs/architecture/nodes-inventory.md` — new node entry
 - Separately, `docker/` was flattened: `core-data/`, `n8n/`, `tandoor/`,
   `twenty-personal-crm/`, `obsidian/`, `homarr/`, `portainer/`, `peekaping/`,
