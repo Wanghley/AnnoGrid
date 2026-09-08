@@ -41,7 +41,7 @@ Two layers, both under `docker/`:
 | `n8n/` | n8n, n8n-runner | external volume `N8n-n8n_storage` → `/home/node/.n8n` | Current n8n deployment (DB now on `anno-db-oci-01`, not in this volume). `N8N_ENCRYPTION_KEY` in its `.env` is load-bearing — losing it makes all stored credentials unreadable. |
 | `twenty-personal-crm/` | twenty-server, twenty-worker | bind mount `./data/storage` → `.local-storage` | DB/Redis on `anno-db-oci-01`. |
 | `tandoor/` | web_recipes | volume `staticfiles` + bind mount `./mediafiles` | Recipe images/uploads are in `mediafiles`. |
-| `obsidian/` | couchdb | bind mounts `./couchdb-data`, `./couchdb-etc` | Obsidian LiveSync backend. |
+| `obsidian/` | *(no longer deployed on this node — retired 2026-09-08; local volumes here were couchdb)* | historically bind mounts `./couchdb-data`, `./couchdb-etc` on this card | Obsidian LiveSync backend. Moved into `docker/core-data/` alongside the other DBs — `couchdb-etc/docker.ini` (the real admin credential) is now at `docker/core-data/configs/couchdb/local.d/docker.ini`, `couchdb-data` restores into a `couchdb_data` named volume there. |
 | `homarr/` | homarr | bind mount `./data` | Dashboard config. |
 | `portainer/` | portainer | volume `portainer_data` | Low value — just UI state/settings, safe to skip if time-constrained. |
 | `peekaping/` | gateway, web, api, migrate, producer, worker, ingester | none (stateless; DB on `anno-db-oci-01`) | Just needs `.env` restored. |
@@ -122,7 +122,7 @@ It intentionally stops there; the rest is a manual, reviewed step:
    cd ../twenty-personal-crm && docker compose up -d
    cd ../peekaping && docker compose up -d
    cd ../tandoor && docker compose up -d
-   cd ../obsidian && docker compose up -d
+   # obsidian/ is now a no-op stub — its couchdb runs in docker/core-data/ instead
    cd ../homarr && docker compose up -d
    cd ../portainer && docker compose up -d
    cd ../homepage && docker compose up -d
