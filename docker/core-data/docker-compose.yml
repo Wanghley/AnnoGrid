@@ -122,9 +122,13 @@ services:
     # To rotate the admin password later, do it via the CouchDB HTTP API
     # (PUT /_node/_local/_config/admins/<user>) after this is up, not here
     # — and remember Obsidian LiveSync's client config needs updating too.
+    #
+    # Mount is read-write (not :ro) on purpose: the entrypoint unconditionally
+    # touches local.d/docker.ini on every start regardless of whether the
+    # admin env vars are set - :ro here causes a permission-denied crash loop.
     volumes:
       - couchdb_data:/opt/couchdb/data
-      - ./configs/couchdb/local.d:/opt/couchdb/etc/local.d:ro
+      - ./configs/couchdb/local.d:/opt/couchdb/etc/local.d
     ports:
       - "${TAILSCALE_IP}:5984:5984"
     networks:
