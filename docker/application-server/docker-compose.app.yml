@@ -1,5 +1,5 @@
 networks:
-  annogrid:
+  shared:
     external: true
 
 volumes:
@@ -34,7 +34,7 @@ services:
     ports:
       - "8080:80"
     networks:
-      - annogrid
+      - shared
 
   n8n:
     image: n8nio/n8n:latest
@@ -65,7 +65,7 @@ services:
     ports:
       - "5678:5678"
     networks:
-      - annogrid
+      - shared
 
   jellyfin:
     image: jellyfin/jellyfin:latest
@@ -88,5 +88,5 @@ services:
     ports:
       - "8096:8096"
     networks:
-      - annogrid
+      - shared
 

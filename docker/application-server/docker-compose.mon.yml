@@ -1,5 +1,5 @@
 networks:
-  annogrid:
+  shared:
     external: true
 
 services:
@@ -18,7 +18,7 @@ services:
       - '--path.rootfs=/host'
       - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containerd/.+)($$|/)'
     networks:
-      - annogrid
+      - shared
     labels:
       homepage.group: anno-app
       homepage.name: Node Exporter
@@ -41,7 +41,7 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
     privileged: true
     networks:
-      - annogrid
+      - shared
     labels:
       homepage.group: anno-app
       homepage.name: cAdvisor
@@ -58,7 +58,7 @@ services:
     environment:
       DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${ANNOGRID_DB_HOST}:5432/${POSTGRES_DB}?sslmode=disable"
     networks:
-      - annogrid
+      - shared
     labels:
       homepage.group: anno-app
       homepage.name: PG Exporter
@@ -76,7 +76,7 @@ services:
     command:
       - "--config.my-cnf="
     networks:
-      - annogrid
+      - shared
     labels:
       homepage.group: anno-app
       homepage.name: MySQL Exporter

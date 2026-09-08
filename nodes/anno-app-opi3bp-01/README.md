@@ -45,7 +45,7 @@ cd /path/to/annogrid
 # Deploy the core stack
 cd docker/application-server
 cp .env.example .env   # fill in real values
-./setup.sh              # creates the shared `annogrid` network, deploys app.yml + mon.yml
+./setup.sh              # creates the shared `shared` docker network, deploys app.yml + mon.yml
 
 # Deploy a standalone stack (repeat per stack you need)
 cd ../n8n
