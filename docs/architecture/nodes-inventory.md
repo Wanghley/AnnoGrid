@@ -479,10 +479,11 @@ SSH Access:       ssh ubuntu@anno-db-oci-01.<your-tailnet>.ts.net
 
 **Role:**
 Runs [`docker/core-data/`](../../docker/core-data/README.md) — centralized
-PostgreSQL, MariaDB, Redis, and MinIO for every AnnoGrid app stack. Replaces
-two previously local DB stacks on `anno-app-opi3bp-01`
-(`application-server/docker-compose.db.yml`, retired, and `core-data/`'s own
-pre-migration local deployment). See
+PostgreSQL, MariaDB, Redis, CouchDB, and MinIO for every AnnoGrid app stack.
+Replaces three previously local DB deployments on `anno-app-opi3bp-01`
+(`application-server/docker-compose.db.yml`, retired; `core-data/`'s own
+pre-migration local deployment; and `docker/obsidian/`'s local couchdb,
+retired 2026-09-08). See
 [`docs/guides/db-migration-to-oci.md`](../guides/db-migration-to-oci.md) and
 [`nodes/anno-db-oci-01/README.md`](../../nodes/anno-db-oci-01/README.md).
 
@@ -491,12 +492,13 @@ pre-migration local deployment). See
 - PostgreSQL (`postgres_data`)
 - MariaDB (`mariadb_data`)
 - Redis (`redis_data`)
+- CouchDB (`couchdb_data`)
 - MinIO (`minio_data`)
 - Node Exporter (metrics collection)
 
 **Security:**
 ```
-All DB ports (5432, 3306, 6379, 9000, 9001) bound to the Tailscale IP only
+All DB ports (5432, 3306, 6379, 5984, 9000, 9001) bound to the Tailscale IP only
 OCI Security List / NSG: allow only SSH (22) + Tailscale UDP (41641)
 No Cloudflare Tunnel — this node is never internet-facing for app traffic
 ```

@@ -19,16 +19,16 @@ instructions.
 | [`docker/n8n/`](../../docker/n8n/) | Workflow automation |
 | [`docker/tandoor/`](../../docker/tandoor/) | Recipe manager |
 | [`docker/twenty-personal-crm/`](../../docker/twenty-personal-crm/) | CRM |
-| [`docker/obsidian/`](../../docker/obsidian/) | CouchDB sync backend for Obsidian LiveSync |
 | [`docker/homarr/`](../../docker/homarr/) | Dashboard |
 | [`docker/portainer/`](../../docker/portainer/) | Docker management UI |
 | [`docker/peekaping/`](../../docker/peekaping/) | Uptime monitoring |
 | [`docker/homepage/`](../../docker/homepage/) | Dashboard (homepage.sh cron + stats.json) |
 
-**Databases**: PostgreSQL, MariaDB, Redis, and MinIO used to run locally here
-(two separate stacks — `application-server/docker-compose.db.yml`, now a
-retired no-op, and `docker/core-data/`'s own pre-migration local deployment).
-`docker/core-data/` isn't deployed on this node anymore at all — it now runs
+**Databases**: PostgreSQL, MariaDB, Redis, CouchDB, and MinIO used to run
+locally here (`application-server/docker-compose.db.yml`, now a retired
+no-op; `docker/core-data/`'s own pre-migration local deployment; and
+`docker/obsidian/`'s local couchdb, retired 2026-09-08). None of these run
+on this node anymore — `docker/core-data/` now holds all of them,
 exclusively on [`anno-db-oci-01`](../anno-db-oci-01/README.md); see
 [`docs/guides/db-migration-to-oci.md`](../../docs/guides/db-migration-to-oci.md).
 Every stack above reaches that node's DBs over Tailscale.

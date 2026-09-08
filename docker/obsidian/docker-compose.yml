@@ -1,13 +1,14 @@
-services:
-  couchdb:
-    image: couchdb:latest
-    container_name: obsidian-couchdb
-    user: 5984:5984
-    env_file:
-      - .env
-    volumes:
-      - ./couchdb-data:/opt/couchdb/data
-      - ./couchdb-etc:/opt/couchdb/etc/local.d
-    ports:
-      - 5984:5984
-    restart: unless-stopped
+# ═══════════════════════════════════════════════════════════════
+# DEPRECATED — retired 2026-09-08
+#
+# CouchDB moved to docker/core-data/ (postgres, mariadb, redis, couchdb,
+# minio consolidated together), deployed on anno-db-oci-01. The config that
+# used to live in couchdb-etc/ here is now at
+# docker/core-data/configs/couchdb/local.d/docker.ini.
+#
+# See docs/guides/db-migration-to-oci.md and docker/core-data/README.md.
+#
+# Kept as an intentional no-op (rather than deleted) for history/rollback
+# reference.
+# ═══════════════════════════════════════════════════════════════
+services: {}
