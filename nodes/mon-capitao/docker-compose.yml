@@ -34,14 +34,14 @@ services:
       - '--path.rootfs=/host'
       - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker|run/docker)($$|/)'
     networks:
-      - annogrid-net
+      - mon-capitao
     deploy:
       resources:
         limits:
           memory: 48M
     labels:
       - "com.annogrid.component=monitoring"
-      - "com.annogrid.node=anno-gw-mon-rpi3bp-01"
+      - "com.annogrid.node=mon-capitao"
       - "homepage.group=anno-gw"
       - "homepage.name=Node Exporter"
       - "homepage.icon=mdi-server-network"
@@ -63,14 +63,14 @@ services:
       - '-housekeeping_interval=30s'
       - '-disable_metrics=percpu,sched,tcp,udp,disk,diskIO,hugetlb,referenced_memory,cpu_topology,resctrl'
     networks:
-      - annogrid-net
+      - mon-capitao
     deploy:
       resources:
         limits:
           memory: 96M
     labels:
       - "com.annogrid.component=monitoring"
-      - "com.annogrid.node=anno-gw-mon-rpi3bp-01"
+      - "com.annogrid.node=mon-capitao"
       - "homepage.group=anno-gw"
       - "homepage.name=cAdvisor"
       - "homepage.icon=mdi-docker"
@@ -95,7 +95,7 @@ services:
     tmpfs:
       - /run
     networks:
-      - annogrid-net
+      - mon-capitao
     deploy:
       resources:
         limits:
@@ -119,14 +119,14 @@ services:
       - '--storage.tsdb.retention.size=512MB'
       - '--web.enable-lifecycle'
     networks:
-      - annogrid-net
+      - mon-capitao
     deploy:
       resources:
         limits:
           memory: 256M
     labels:
       - "com.annogrid.component=monitoring"
-      - "com.annogrid.node=anno-gw-mon-rpi3bp-01"
+      - "com.annogrid.node=mon-capitao"
 
   loki:
     image: grafana/loki:latest
@@ -140,14 +140,14 @@ services:
     command:
       - '-config.file=/etc/loki/loki-config.yml'
     networks:
-      - annogrid-net
+      - mon-capitao
     deploy:
       resources:
         limits:
           memory: 160M
     labels:
       - "com.annogrid.component=monitoring"
-      - "com.annogrid.node=anno-gw-mon-rpi3bp-01"
+      - "com.annogrid.node=mon-capitao"
 
   # Ships this node's own logs into the local Loki. Edge nodes run the
   # sidecar in docker/shared/monitoring/ pointed at ${TAILSCALE_IP}:3100
@@ -169,14 +169,14 @@ services:
     depends_on:
       - loki
     networks:
-      - annogrid-net
+      - mon-capitao
     deploy:
       resources:
         limits:
           memory: 64M
     labels:
       - "com.annogrid.component=monitoring"
-      - "com.annogrid.node=anno-gw-mon-rpi3bp-01"
+      - "com.annogrid.node=mon-capitao"
 
   # Grafana does NOT run here — it moved to nodes/anno-gw-vps-macauba-01/
   # (more headroom there, and it's next to the Cloudflare tunnel that
@@ -196,21 +196,26 @@ services:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--storage.path=/alertmanager'
     networks:
-      - annogrid-net
+      - mon-capitao
     deploy:
       resources:
         limits:
           memory: 48M
     labels:
       - "com.annogrid.component=monitoring"
-      - "com.annogrid.node=anno-gw-mon-rpi3bp-01"
+      - "com.annogrid.node=mon-capitao"
 
 networks:
-  annogrid-net:
+  # No fixed subnet: a hardcoded 172.20.0.0/16 collided with another
+  # network's pool already on this host ("invalid pool request: Pool
+  # overlaps with other one on this address space"). Let Docker pick
+  # from its default address pools instead.
+  #
+  # `name:` forces the actual docker network to be called exactly
+  # "mon-capitao" instead of the compose-default "<project>_mon-capitao".
+  mon-capitao:
+    name: mon-capitao
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
 
 volumes:
   prometheus-data:

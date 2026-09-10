@@ -11,7 +11,7 @@ global:
   evaluation_interval: 30s
   external_labels:
     cluster: annogrid
-    node: anno-gw-mon-rpi3bp-01
+    node: mon-capitao
 
 rule_files:
   - /etc/prometheus/rules/*.yml
@@ -26,20 +26,20 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
         labels:
-          instance: anno-gw-mon-rpi3bp-01
+          instance: mon-capitao
 
   - job_name: node-exporter
     static_configs:
       - targets: ['node-exporter:9100']
         labels:
-          instance: anno-gw-mon-rpi3bp-01
+          instance: mon-capitao
           role: gateway-monitoring
 
   - job_name: cadvisor
     static_configs:
       - targets: ['cadvisor:8080']
         labels:
-          instance: anno-gw-mon-rpi3bp-01
+          instance: mon-capitao
           role: gateway-monitoring
 
   # Peer nodes over Tailscale. Targets live in targets/cluster-nodes.yml —
