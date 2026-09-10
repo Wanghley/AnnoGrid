@@ -31,7 +31,7 @@ services:
     depends_on:
       - grafana
     networks:
-      - annogrid-vps-net
+      - vps-macauba
     deploy:
       resources:
         limits:
@@ -70,7 +70,7 @@ services:
       - ./grafana-provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./grafana-provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
     networks:
-      - annogrid-vps-net
+      - vps-macauba
     deploy:
       resources:
         limits:
@@ -124,7 +124,10 @@ services:
       - "com.annogrid.node=anno-gw-vps-macauba-01"
 
 networks:
-  annogrid-vps-net:
+  # `name:` forces the actual docker network to be called exactly
+  # "vps-macauba" instead of the compose-default "<project>_vps-macauba".
+  vps-macauba:
+    name: vps-macauba
     driver: bridge
 
 volumes:
