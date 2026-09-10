@@ -1,5 +1,17 @@
 AnnoGrid: Centralized Monitoring Stack
 
+This is the canonical edge-node sidecar — deploy it on any node that isn't
+already one of the ones under `../../../nodes/` (which define their own
+node-exporter inline). It replaces two other, now-deleted drafts of the
+same thing (`docker/shared/general/setup-node.sh` and
+`docker/gateway-monitoring-server/`'s promtail bits) that guessed different
+IPs for the same Gateway and never agreed with each other.
+
+The Gateway referenced below is
+[`nodes/anno-gw-mon-rpi3bp-01/`](../../../nodes/anno-gw-mon-rpi3bp-01/README.md) —
+that's where Loki and Prometheus actually run. `GATEWAY_IP` in your `.env`
+should be its Tailscale IP.
+
 This directory contains the configuration for the AnnoGrid Observability Pipeline. It allows for centered monitoring of a multi-node edge cluster using a Gateway-Agent architecture.
 
 🏗 System Architecture

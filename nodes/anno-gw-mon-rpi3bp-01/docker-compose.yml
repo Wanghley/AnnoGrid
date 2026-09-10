@@ -1,83 +1,194 @@
-version: '3.8'
+name: anno-gw-mon-rpi3bp-01
 
-# Gateway & Monitoring Node (anno-gw-mon-rpi3bp-01)
-# Raspberry Pi 3B+
-# Purpose: Central hub for monitoring, alerting, VPN, and tunneling
+# Monitoring Node (anno-gw-mon-rpi3bp-01) — Raspberry Pi 3B+, 1GB RAM
+# Purpose: metrics (Prometheus) + logs (Loki) + alerting (Alertmanager) for
+# the whole cluster, plus the read-only docker socket-proxy the Homepage
+# dashboard on another node uses to show this node's containers.
+#
+# Grafana deliberately does NOT run here — it lives on the gateway VPS
+# (nodes/anno-gw-vps-macauba-01/), which has more headroom and sits next to
+# the Cloudflare tunnel that serves it publicly. Grafana there reaches this
+# Pi's Prometheus (:9090) and Loki (:3100) over Tailscale as remote
+# datasources. This Pi has no cloudflared of its own and nothing it runs is
+# ever reachable from the plain internet — only from inside the tailnet.
+#
+# Every service below carries a hard memory ceiling — this box only has
+# ~700MB usable after the OS. Ceilings are safety limits, not reservations;
+# actual steady-state usage should sit well under them. Enable zram
+# (see scripts/gateway-monitoring/gateway-node-setup.sh --enable-zram) as a
+# swap backstop.
+#
+# All published ports bind to ${TAILSCALE_IP} only, never 0.0.0.0 — nothing
+# here should be reachable from the plain LAN.
 
 services:
-  # Node Exporter - Local metrics
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
     restart: always
-    ports:
-      - "9100:9100"
     volumes:
+      - /:/host:ro,rslave
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
-      - /:/rootfs:ro
     command:
-      - '--path.procfs=/host/proc'
-      - '--path.sysfs=/host/sys'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker|run/docker)($$|/)'
     networks:
       - annogrid-net
+    deploy:
+      resources:
+        limits:
+          memory: 48M
     labels:
       - "com.annogrid.component=monitoring"
       - "com.annogrid.node=anno-gw-mon-rpi3bp-01"
+      - "homepage.group=anno-gw"
+      - "homepage.name=Node Exporter"
+      - "homepage.icon=mdi-server-network"
+      - "homepage.description=Host metrics exporter"
 
-  # Prometheus - Metrics collection & storage
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: always
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    command:
+      - '-docker_only'
+      - '-housekeeping_interval=30s'
+      - '-disable_metrics=percpu,sched,tcp,udp,disk,diskIO,hugetlb,referenced_memory,cpu_topology,resctrl'
+    networks:
+      - annogrid-net
+    deploy:
+      resources:
+        limits:
+          memory: 96M
+    labels:
+      - "com.annogrid.component=monitoring"
+      - "com.annogrid.node=anno-gw-mon-rpi3bp-01"
+      - "homepage.group=anno-gw"
+      - "homepage.name=cAdvisor"
+      - "homepage.icon=mdi-docker"
+      - "homepage.description=Container metrics"
+
+  # Read-only docker socket proxy — consumed cross-host by Homepage
+  # (docker/homepage/config/docker.yaml) to list this node's containers.
+  docker-proxy:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    container_name: docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      SERVICES: 1
+      TASKS: 1
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "${TAILSCALE_IP}:2375:2375"
+    read_only: true
+    tmpfs:
+      - /run
+    networks:
+      - annogrid-net
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
     restart: always
     ports:
-      - "9090:9090"
+      - "${TAILSCALE_IP}:9090:9090"
     volumes:
       - ./prometheus-config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus-config/rules/:/etc/prometheus/rules/:ro
+      - ./prometheus-config/rules:/etc/prometheus/rules:ro
+      - ./prometheus-config/targets:/etc/prometheus/targets:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.time=15d'
+      - '--storage.tsdb.retention.size=512MB'
+      - '--web.enable-lifecycle'
     networks:
       - annogrid-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     labels:
       - "com.annogrid.component=monitoring"
       - "com.annogrid.node=anno-gw-mon-rpi3bp-01"
 
-  # Grafana - Visualization & dashboards
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
     restart: always
     ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel
-      - TZ=UTC
+      - "${TAILSCALE_IP}:3100:3100"
     volumes:
-      - grafana-data:/var/lib/grafana
-      - ./grafana-provisioning/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./grafana-provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-    depends_on:
-      - prometheus
+      - ./loki-config/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    command:
+      - '-config.file=/etc/loki/loki-config.yml'
     networks:
       - annogrid-net
+    deploy:
+      resources:
+        limits:
+          memory: 160M
     labels:
       - "com.annogrid.component=monitoring"
       - "com.annogrid.node=anno-gw-mon-rpi3bp-01"
 
-  # Alert Manager - Alert routing & notifications
+  # Ships this node's own logs into the local Loki. Edge nodes run the
+  # sidecar in docker/shared/monitoring/ pointed at ${TAILSCALE_IP}:3100
+  # to ship theirs.
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    restart: always
+    environment:
+      - GATEWAY_ID=${GATEWAY_ID}
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./loki-config/promtail-config.yml:/etc/promtail/config.yml:ro
+      - promtail-data:/data
+    command:
+      - '-config.file=/etc/promtail/config.yml'
+      - '-config.expand-env=true'
+    depends_on:
+      - loki
+    networks:
+      - annogrid-net
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    labels:
+      - "com.annogrid.component=monitoring"
+      - "com.annogrid.node=anno-gw-mon-rpi3bp-01"
+
+  # Grafana does NOT run here — it moved to nodes/anno-gw-vps-macauba-01/
+  # (more headroom there, and it's next to the Cloudflare tunnel that
+  # serves it publicly). It reaches this Pi's Prometheus/Loki over
+  # Tailscale. See that node's README for the datasource wiring.
+
   alertmanager:
     image: prom/alertmanager:latest
     container_name: alertmanager
     restart: always
     ports:
-      - "9093:9093"
+      - "${TAILSCALE_IP}:9093:9093"
     volumes:
       - ./alertmanager-config/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
@@ -86,23 +197,13 @@ services:
       - '--storage.path=/alertmanager'
     networks:
       - annogrid-net
+    deploy:
+      resources:
+        limits:
+          memory: 48M
     labels:
       - "com.annogrid.component=monitoring"
       - "com.annogrid.node=anno-gw-mon-rpi3bp-01"
-
-  # Optional: Loki - Log aggregation
-  # loki:
-  #   image: grafana/loki:latest
-  #   container_name: loki
-  #   restart: always
-  #   ports:
-  #     - "3100:3100"
-  #   volumes:
-  #     - ./loki-config/loki-config.yml:/etc/loki/local-config.yml:ro
-  #     - loki-data:/loki
-  #   command: -config.file=/etc/loki/local-config.yml
-  #   networks:
-  #     - annogrid-net
 
 networks:
   annogrid-net:
@@ -113,8 +214,6 @@ networks:
 
 volumes:
   prometheus-data:
-    driver: local
-  grafana-data:
-    driver: local
+  loki-data:
+  promtail-data:
   alertmanager-data:
-    driver: local

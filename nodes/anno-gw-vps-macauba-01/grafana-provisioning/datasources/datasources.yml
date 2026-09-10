@@ -1,0 +1,29 @@
+# Grafana runs on this VPS but the data it queries lives on the monitoring
+# Pi (anno-gw-mon-rpi3bp-01), reached over Tailscale. $__env{GATEWAY_IP}
+# expands from the GATEWAY_IP env var passed to the grafana container
+# (docker-compose.yml) — that's the Pi's Tailscale IP, same var promtail
+# here already uses to find it. Edit .env, not this file, if it changes.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://$__env{GATEWAY_IP}:9090
+    isDefault: true
+    editable: false
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://$__env{GATEWAY_IP}:3100
+    editable: false
+
+  - name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://$__env{GATEWAY_IP}:9093
+    jsonData:
+      implementation: prometheus
+    editable: false

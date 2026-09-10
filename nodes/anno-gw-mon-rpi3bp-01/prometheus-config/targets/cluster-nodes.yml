@@ -1,0 +1,47 @@
+# Peer node_exporter targets, reached over Tailscale.
+#
+# Filled in from `tailscale status` on 2026-09-10. This box itself
+# (mon-capitao, 100.78.7.53) is NOT listed here — it's scraped as the
+# local `node-exporter` job in prometheus.yml instead.
+#
+# Instance labels use the real Tailscale hostnames (not the anno-*-01
+# names used elsewhere in this repo's docs) since that's what you'll
+# actually see in `tailscale status`, SSH, etc. — easier to cross-reference
+# than a second naming scheme for the same boxes.
+#
+# Prometheus hot-reloads this file on save — no restart needed. This is
+# the single place these IPs live; don't duplicate them elsewhere.
+
+- targets:
+    - "100.105.51.108:9100" # app-baru
+  labels:
+    instance: app-baru
+    role: application
+
+# NOTE: two AI boxes showed up in `tailscale status` (ai-angico,
+# ai-jacaranda) where the docs only ever described one
+# (anno-ai-jetson-orin-nano-01). Both are added below — drop whichever
+# one isn't meant to be monitored long-term.
+- targets:
+    - "100.74.211.123:9100" # ai-angico
+  labels:
+    instance: ai-angico
+    role: ai
+
+- targets:
+    - "100.85.193.49:9100" # ai-jacaranda
+  labels:
+    instance: ai-jacaranda
+    role: ai
+
+- targets:
+    - "100.75.122.73:9100" # nas-faveira
+  labels:
+    instance: nas-faveira
+    role: storage
+
+- targets:
+    - "100.111.147.14:9100" # vps-macauba (public ingress VPS)
+  labels:
+    instance: vps-macauba
+    role: gateway

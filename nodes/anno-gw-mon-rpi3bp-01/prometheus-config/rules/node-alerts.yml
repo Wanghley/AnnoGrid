@@ -1,0 +1,65 @@
+groups:
+  - name: annogrid-node-health
+    rules:
+      - alert: NodeDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} is down"
+          description: "No successful scrape from {{ $labels.instance }} (job {{ $labels.job }}) for 5 minutes."
+
+      - alert: HighCPULoad
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU on {{ $labels.instance }}"
+          description: "CPU usage above 80% for 10+ minutes."
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage above 90% for 10+ minutes — on a 1GB node this is close to OOM."
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 15
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Filesystem {{ $labels.mountpoint }} has less than 15% free space."
+
+      - alert: DiskSpaceCritical
+        expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "Filesystem {{ $labels.mountpoint }} has less than 5% free space."
+
+      - alert: HighTemperature
+        expr: node_thermal_zone_temp > 75
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High SoC temperature on {{ $labels.instance }}"
+          description: "Thermal zone {{ $labels.zone }} reporting {{ $value }}°C."
+
+      - alert: PrometheusTargetMissing
+        expr: up{job="cluster-nodes"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cluster node {{ $labels.instance }} unreachable"
+          description: "Check Tailscale connectivity and that node-exporter is running on {{ $labels.instance }}."

@@ -1,0 +1,132 @@
+name: anno-gw-vps-macauba-01
+
+# Gateway Node (anno-gw-vps-macauba-01) — VPS, public ingress + Grafana for
+# AnnoGrid.
+#
+# This box is the ONLY thing in the cluster with a public IP that matters.
+# It terminates the Cloudflare Tunnel and, per Cloudflare Zero Trust
+# "Public Hostname" rules configured in the CF dashboard:
+#   - grafana.<domain>      -> http://grafana:3000        (same docker network,
+#                                                            no Tailscale hop)
+#   - alertmanager.<domain> -> http://${GATEWAY_IP}:9093   (over Tailscale, to
+#                                                            anno-gw-mon-rpi3bp-01)
+# cloudflared IS the reverse proxy here, no nginx/Caddy needed. This box
+# also runs the standard node-exporter+promtail sidecar so the monitoring
+# Pi can see and log it like every other node in the cluster.
+#
+# Grafana itself lives here (not on the 1GB monitoring Pi) because this box
+# has more headroom and sits next to the tunnel that serves it publicly.
+# It reaches the Pi's Prometheus (:9090) and Loki (:3100) as remote
+# datasources over Tailscale — see grafana-provisioning/datasources/.
+#
+# Requires: Tailscale installed and joined on the HOST (not containerized)
+# — see setup.sh. Containers reach the tailnet through the host's routes.
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: always
+    command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN:?set CF_TUNNEL_TOKEN in .env}
+    depends_on:
+      - grafana
+    networks:
+      - annogrid-vps-net
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    labels:
+      - "com.annogrid.component=networking"
+      - "com.annogrid.node=anno-gw-vps-macauba-01"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: always
+    ports:
+      - "${TAILSCALE_IP}:3000:3000"
+    environment:
+      - GATEWAY_IP=${GATEWAY_IP}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000}
+      # Central Postgres backend (anno-db-oci-01) instead of local sqlite —
+      # survives this container being recreated without relying on the
+      # named volume alone. Leave GF_DATABASE_TYPE unset (defaults to
+      # sqlite3) if you'd rather not depend on anno-db-oci-01 being up.
+      - GF_DATABASE_TYPE=${GF_DATABASE_TYPE:-sqlite3}
+      - GF_DATABASE_HOST=${GF_DATABASE_HOST:-}
+      - GF_DATABASE_NAME=${GF_DATABASE_NAME:-}
+      - GF_DATABASE_USER=${GF_DATABASE_USER:-}
+      - GF_DATABASE_PASSWORD=${GF_DATABASE_PASSWORD:-}
+      - GF_DATABASE_SSL_MODE=disable
+      - TZ=UTC
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana-provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana-provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+    networks:
+      - annogrid-vps-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    labels:
+      - "com.annogrid.component=monitoring"
+      - "com.annogrid.node=anno-gw-vps-macauba-01"
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: always
+    volumes:
+      - /:/host:ro,rslave
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker|run/docker)($$|/)'
+    ports:
+      - "${TAILSCALE_IP}:9100:9100"
+    deploy:
+      resources:
+        limits:
+          memory: 48M
+    labels:
+      - "com.annogrid.component=monitoring"
+      - "com.annogrid.node=anno-gw-vps-macauba-01"
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    restart: always
+    environment:
+      - GATEWAY_IP=${GATEWAY_IP}
+      - NODE_NAME=${NODE_NAME:-anno-gw-vps-macauba-01}
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./promtail-config.yml:/etc/promtail/config.yml:ro
+      - promtail-data:/data
+    command:
+      - '-config.file=/etc/promtail/config.yml'
+      - '-config.expand-env=true'
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    labels:
+      - "com.annogrid.component=monitoring"
+      - "com.annogrid.node=anno-gw-vps-macauba-01"
+
+networks:
+  annogrid-vps-net:
+    driver: bridge
+
+volumes:
+  promtail-data:
+  grafana-data:

@@ -30,13 +30,27 @@ docker/
 ├── homepage/                 # Dashboard (homepage.sh cron + stats.json)
 ├── restore/                   # SD-card recovery tooling — see ../RESTORE.md
 ├── ai-jetson-orin/             # AI/ML node stacks (hermes-agent, litellm, monitoring)
-├── gateway-monitoring-server/   # Gateway/monitoring node stack (grafana)
 └── shared/                       # Cross-cutting / not tied to one specific node
     ├── canary/                     # Canary deployment monitoring (runs on NAS)
-    ├── general/                     # setup-node.sh + watchtower (auto-updates)
-    ├── monitoring/                   # Standalone monitoring stack
+    ├── general/                     # watchtower (auto-updates)
+    ├── monitoring/                   # Edge-node sidecar: node-exporter + cAdvisor +
+    │                                 # promtail, pointed at the monitoring Pi's Loki/
+    │                                 # Prometheus. Deploy this on any node not already
+    │                                 # covered by nodes/*/docker-compose.yml.
     └── wppconnect/                    # WhatsApp connector
 ```
+
+There is no `gateway-monitoring-server/` here anymore — that stack (plus a
+second, independent draft of it in `scripts/setup-gateway-monitoring.sh`,
+and a third sidecar generator in `docker/shared/general/setup-node.sh`)
+were three separate, mutually-contradictory scaffolds for the same
+gateway/monitoring node, none of which actually worked end-to-end (Loki was
+never wired up in any of them). They've been deleted. The real, working
+stack is split across
+[`nodes/anno-gw-mon-rpi3bp-01/`](../nodes/anno-gw-mon-rpi3bp-01/README.md)
+(Prometheus/Loki/Alertmanager) and
+[`nodes/anno-gw-vps-macauba-01/`](../nodes/anno-gw-vps-macauba-01/README.md)
+(Grafana + public ingress) — see those READMEs.
 
 ## Why the flat layout
 
@@ -61,8 +75,8 @@ into `core-data/`.
 don't map cleanly to one node, so they're grouped under `shared/` instead of
 sitting at the top level.
 
-`docker/ai-jetson-orin/` and `docker/gateway-monitoring-server/` still nest
-their sub-stacks the old way — not touched in this pass.
+`docker/ai-jetson-orin/` still nests its sub-stacks the old way — not
+touched in this pass.
 
 ---
 

@@ -1,28 +1,52 @@
+# Prometheus config for anno-gw-mon-rpi3bp-01.
+#
+# This node IS the metrics hub — it scrapes everyone else over Tailscale and
+# stores locally. It does NOT remote_write anywhere else; there is no
+# "more central" Prometheus in this cluster (see docs/architecture/
+# cluster-architecture.md: "Run metrics collection locally, no remote
+# scraping"). If that ever changes, add a `remote_write:` block back here.
+
 global:
-  scrape_interval: 15s
+  scrape_interval: 30s
+  evaluation_interval: 30s
   external_labels:
-    dataset: ${APP_NAME}
-    host: ${GATEWAY_ID}
+    cluster: annogrid
+    node: anno-gw-mon-rpi3bp-01
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
 
 scrape_configs:
-  - job_name: 'monitoring-node'
+  - job_name: prometheus
     static_configs:
-      - targets: ['host.docker.internal:9100'] # node-exporter on host
+      - targets: ['localhost:9090']
         labels:
-          nodename: ${GATEWAY_ID} # This makes it match your other nodes
-      - targets: ['netdata:19999'] # Netdata is in a container, so this still works
-        labels:
-          nodename: ${GATEWAY_ID}
+          instance: anno-gw-mon-rpi3bp-01
 
-  - job_name: 'cluster-nodes'
+  - job_name: node-exporter
     static_configs:
-      - targets:
-          - '100.71.104.20:9100'
-          - '100.123.183.36:9100'
-          - '100.114.225.52:9100'
+      - targets: ['node-exporter:9100']
+        labels:
+          instance: anno-gw-mon-rpi3bp-01
+          role: gateway-monitoring
 
-remote_write:
-  - url: "${CENTRAL_PROM_URL}"
-    basic_auth:
-      username: "${CENTRAL_PROM_USER}"
-      password: "${CENTRAL_PROM_TOKEN}"
+  - job_name: cadvisor
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          instance: anno-gw-mon-rpi3bp-01
+          role: gateway-monitoring
+
+  # Peer nodes over Tailscale. Targets live in targets/cluster-nodes.yml —
+  # Prometheus watches that file and hot-reloads it on change, no restart
+  # or container rebuild needed to add/edit a peer.
+  - job_name: cluster-nodes
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/cluster-nodes.yml
+        refresh_interval: 1m

@@ -12,6 +12,7 @@
 # Usage:
 #   sudo ./gateway-node-setup.sh
 #   sudo SKIP_HEAVY=1 ENABLE_NODE_EXPORTER=1 ./gateway-node-setup.sh
+#   sudo ENABLE_ZRAM=1 ./gateway-node-setup.sh
 #   sudo DRY_RUN=1 ./gateway-node-setup.sh
 #
 set -euo pipefail
@@ -23,11 +24,13 @@ NODE_EXPORTER_VERSION="${NODE_EXPORTER_VERSION:-v1.7.2}"
 NODE_EXPORTER_USER="${NODE_EXPORTER_USER:-node_exporter}"
 NODE_EXPORTER_BIN="${NODE_EXPORTER_BIN:-/usr/local/bin/node_exporter}"
 GDIR="${GDIR:-/etc/gateway-setup}"
+ZRAM_PERCENT="${ZRAM_PERCENT:-50}"
 
 # Control env flags:
 DRY_RUN=${DRY_RUN:-0}                 # 1 = don't perform actions, just echo
 SKIP_HEAVY=${SKIP_HEAVY:-0}          # 1 = skip dnsmasq/hostapd group
 ENABLE_NODE_EXPORTER=${ENABLE_NODE_EXPORTER:-0}  # 1 = enable+start node_exporter at end
+ENABLE_ZRAM=${ENABLE_ZRAM:-0}          # 1 = install+enable zram swap (recommended on 1GB Pis)
 
 # Package groups (installed incrementally)
 PKG_GROUP_BASE=(tmux haveged curl wget git vim moreutils htop jq)
@@ -55,12 +58,18 @@ gateway-node-setup.sh - idempotent gateway/monitoring installer
 Environment:
   DRY_RUN=1               Do not change system; only print actions
   SKIP_HEAVY=1            Skip optional heavy packages (dnsmasq, hostapd)
-  ENABLE_NODE_EXPORTER=1  Enable and start node_exporter at the end
+  ENABLE_NODE_EXPORTER=1  Enable and start a systemd node_exporter at the end.
+                          Leave this OFF if this box also runs the Docker
+                          node-exporter (nodes/anno-gw-mon-rpi3bp-01/) — both
+                          bind :9100 and will conflict.
+  ENABLE_ZRAM=1           Install zram-tools and enable compressed swap.
+                          Recommended on any 1GB Pi running Docker.
+  ZRAM_PERCENT=           zram size as % of RAM (default ${ZRAM_PERCENT})
   NODE_EXPORTER_VERSION=  Override node_exporter version (default ${NODE_EXPORTER_VERSION})
 
 Examples:
   sudo ./gateway-node-setup.sh
-  sudo SKIP_HEAVY=1 ENABLE_NODE_EXPORTER=1 ./gateway-node-setup.sh
+  sudo SKIP_HEAVY=1 ENABLE_ZRAM=1 ./gateway-node-setup.sh
 EOF
 }
 
@@ -232,17 +241,46 @@ EOF
 
 install_node_exporter || log "node_exporter installation failed or skipped"
 
+# ===== zram (compressed swap) =====
+setup_zram() {
+  log "Installing zram-tools (zram ${ZRAM_PERCENT}% of RAM, zstd)..."
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "[DRY RUN] apt-get install -y zram-tools; configure /etc/default/zramswap; enable zramswap.service"
+    return 0
+  fi
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends zram-tools >>"$LOGFILE" 2>&1 \
+    || { log "Failed to install zram-tools"; return 1; }
+
+  cat > /etc/default/zramswap <<EOF
+ALGO=zstd
+PERCENT=${ZRAM_PERCENT}
+EOF
+
+  systemctl enable --now zramswap.service
+  log "zram swap enabled (${ZRAM_PERCENT}% of RAM, zstd). Check with: swapon --show"
+}
+
+if [ "${ENABLE_ZRAM}" -eq 1 ]; then
+  setup_zram || log "zram setup failed or skipped"
+else
+  log "ENABLE_ZRAM not set — skipping zram (recommended on 1GB Pis: rerun with ENABLE_ZRAM=1)."
+fi
+
 # ===== create helper README and notes =====
 mkdir -p "$GDIR"
 cat > "$GDIR/README" <<'EOF'
 Gateway / Monitoring Node - README
 
 Installed components (selected):
- - node_exporter (Prometheus)
+ - node_exporter (Prometheus) — binary + systemd unit, NOT started unless
+   ENABLE_NODE_EXPORTER=1 was passed. If this box runs the Docker stack in
+   nodes/anno-gw-mon-rpi3bp-01/, leave it disabled — that stack already runs
+   node-exporter in a container on :9100.
  - nftables, netfilter-persistent, iptables-persistent
  - ufw, fail2ban, wireguard-tools
  - monitoring/admin tools: rsync, tcpdump, ethtool, logrotate
  - optional: dnsmasq, hostapd (if SKIP_HEAVY not set)
+ - optional: zram-tools (if ENABLE_ZRAM=1 was passed)
 
 Safety notes:
  - The script does NOT enable/alter network services that can drop SSH by default.
