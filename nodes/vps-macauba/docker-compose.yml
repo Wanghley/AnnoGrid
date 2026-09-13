@@ -61,6 +61,11 @@ services:
       - GF_ANALYTICS_REPORTING_ENABLED=false
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000}
+      # Lets panels be iframed (e.g. Homarr d-solo embeds). Off by default —
+      # Grafana sends X-Frame-Options: deny otherwise, which blocks embedding
+      # from ANY origin regardless of how the request reaches it (public
+      # hostname, Tailscale IP, doesn't matter).
+      - GF_SECURITY_ALLOW_EMBEDDING=true
       # Central Postgres backend (anno-db-oci-01) instead of local sqlite —
       # survives this container being recreated without relying on the
       # named volume alone. Leave GF_DATABASE_TYPE unset (defaults to
