@@ -1,14 +1,39 @@
+# Tandoor Recipes — self-hosted recipe manager.
+# https://docs.tandoor.dev/
+#
+# Replaces the stale pre-refactor stub that used to live here (0.0.0.0
+# binding, no .env.example, no resource limits, no real DB config).
+#
+# No bundled Postgres — plain django.db.backends.postgresql, no special
+# extensions needed (unlike split-pro's pg_cron requirement), so this
+# safely reuses the shared core-data-postgres instance over its
+# Tailscale IP, same pattern as Spliit. A `tandoor_db` database already
+# exists there from a previous attempt at this — see sql/create-db.sql
+# for reusing or recreating it.
+#
+# Published on ${TAILSCALE_IP}:7001 — matches the port the existing
+# (currently stale) Cloudflare Tunnel route for recipes.wanghley.com
+# already expects, pointed at the old app node (100.67.194.10:7001).
+# Once this is up, that route just needs its IP updated, not its port.
+
 services:
   web_recipes:
+    image: vabene1111/recipes:latest
+    container_name: tandoor
     restart: always
-    image: vabene1111/recipes
     env_file:
-      - ./.env
+      - .env
     ports:
-      - 7001:80
+      - "${TAILSCALE_IP}:7001:80"
     volumes:
       - staticfiles:/opt/recipes/staticfiles
       - ./mediafiles:/opt/recipes/mediafiles
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    labels:
+      - "com.annogrid.component=application"
 
 volumes:
   staticfiles:
