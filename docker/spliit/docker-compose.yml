@@ -6,17 +6,19 @@
 # build on whatever host this runs on).
 #
 # No postgres service here — this points at an existing, separately
-# managed Postgres instance instead of bundling its own (see the
-# upstream project's own compose.yaml for the bundled-db version).
+# managed Postgres instance over its Tailscale IP instead of joining
+# core-data's docker network. Application containers reach Postgres over
+# Tailscale, not by joining core-data directly — verified working here
+# with a full authenticated psql round-trip (not just a TCP handshake),
+# so this differs from the Grafana Cloudflare Tunnel / HTTP embedding
+# hairpin issues found elsewhere in this repo's history — those were
+# HTTP-specific, not a blanket "containers can't reach the host's own
+# Tailscale IP" rule.
+#
 # Create the dedicated database + user first (see sql/create-db.sql in
 # this directory), then fill in .env from .env.example before starting.
 #
 # Networks:
-#   - core-data: reaches the existing Postgres by container name
-#     (core-data-postgres). Do NOT point this at the host's Tailscale
-#     IP instead — a container can't reach its own host's Tailscale
-#     IP (hairpin NAT), the same issue diagnosed for Grafana's
-#     Cloudflare Tunnel earlier in this repo's history.
 #   - shared: the common network other catalog services deployed
 #     directly on a host (homarr, n8n, ...) join, so cloudflared can
 #     reach this one by container name too once it's tunnel-exposed.
@@ -29,7 +31,6 @@ services:
     env_file:
       - .env
     networks:
-      - core-data
       - shared
     deploy:
       resources:
@@ -39,9 +40,6 @@ services:
       - "com.annogrid.component=application"
 
 networks:
-  core-data:
-    name: core-data_core-data
-    external: true
   shared:
     name: shared
     external: true
