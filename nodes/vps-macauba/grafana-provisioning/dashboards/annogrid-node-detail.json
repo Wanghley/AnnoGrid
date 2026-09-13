@@ -497,7 +497,7 @@
       },
       "targets": [
         {
-          "expr": "sum(node_filesystem_size_bytes{instance=\"$instance\", fstype!~\"tmpfs|overlay|squashfs\"})",
+          "expr": "sum(max by(device) (node_filesystem_size_bytes{instance=\"$instance\", fstype!~\"tmpfs|overlay|squashfs|ramfs\"}))",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
