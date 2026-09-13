@@ -7,7 +7,7 @@
   "graphTooltip": 1,
   "schemaVersion": 39,
   "version": 1,
-  "refresh": "30s",
+  "refresh": "1m",
   "time": { "from": "now-3h", "to": "now" },
   "templating": {
     "list": [

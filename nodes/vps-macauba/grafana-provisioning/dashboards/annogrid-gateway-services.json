@@ -7,7 +7,7 @@
   "graphTooltip": 1,
   "schemaVersion": 39,
   "version": 1,
-  "refresh": "30s",
+  "refresh": "1m",
   "time": { "from": "now-6h", "to": "now" },
   "panels": [
     { "id": 1, "type": "row", "title": "Prometheus", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
