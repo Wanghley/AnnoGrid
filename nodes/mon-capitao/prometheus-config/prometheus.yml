@@ -7,8 +7,13 @@
 # scraping"). If that ever changes, add a `remote_write:` block back here.
 
 global:
-  scrape_interval: 30s
-  evaluation_interval: 30s
+  # 60s instead of the old 30s: this box has 1GB RAM and SD card storage —
+  # doubling the interval halves TSDB write/eval load and SD card I/O
+  # pressure. 60s resolution is plenty for fleet health monitoring; the
+  # alert `for:` windows (5-15m) still get 5-15 evaluations each, no loss
+  # of alerting responsiveness.
+  scrape_interval: 60s
+  evaluation_interval: 60s
   external_labels:
     cluster: annogrid
     node: mon-capitao

@@ -60,7 +60,7 @@ services:
       - /dev/disk/:/dev/disk:ro
     command:
       - '-docker_only'
-      - '-housekeeping_interval=30s'
+      - '-housekeeping_interval=60s'
       - '-disable_metrics=percpu,sched,tcp,udp,disk,diskIO,hugetlb,referenced_memory,cpu_topology,resctrl'
     networks:
       - mon-capitao
