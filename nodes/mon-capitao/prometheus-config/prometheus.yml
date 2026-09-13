@@ -42,6 +42,31 @@ scrape_configs:
           instance: mon-capitao
           role: gateway-monitoring
 
+  # The rest of the gateway monitoring stack — self-scraped over the local
+  # mon-capitao docker network so their own /metrics (ingestion rates,
+  # alert counts, log processing, etc.) show up in Grafana too, not just
+  # their up/down status.
+  - job_name: loki
+    static_configs:
+      - targets: ['loki:3100']
+        labels:
+          instance: mon-capitao
+          role: gateway-monitoring
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: ['alertmanager:9093']
+        labels:
+          instance: mon-capitao
+          role: gateway-monitoring
+
+  - job_name: promtail
+    static_configs:
+      - targets: ['promtail:9080']
+        labels:
+          instance: mon-capitao
+          role: gateway-monitoring
+
   # Peer nodes over Tailscale. Targets live in targets/cluster-nodes.yml —
   # Prometheus watches that file and hot-reloads it on change, no restart
   # or container rebuild needed to add/edit a peer.
