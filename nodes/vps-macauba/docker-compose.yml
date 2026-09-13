@@ -69,12 +69,13 @@ services:
       - grafana-data:/var/lib/grafana
       - ./grafana-provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./grafana-provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana-provisioning/dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - vps-macauba
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
     labels:
       - "com.annogrid.component=monitoring"
       - "com.annogrid.node=anno-gw-vps-macauba-01"
