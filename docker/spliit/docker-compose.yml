@@ -9,19 +9,26 @@
 # managed Postgres instance over its Tailscale IP instead of joining
 # core-data's docker network. Application containers reach Postgres over
 # Tailscale, not by joining core-data directly — verified working here
-# with a full authenticated psql round-trip (not just a TCP handshake),
-# so this differs from the Grafana Cloudflare Tunnel / HTTP embedding
-# hairpin issues found elsewhere in this repo's history — those were
-# HTTP-specific, not a blanket "containers can't reach the host's own
-# Tailscale IP" rule.
+# with a full authenticated psql round-trip (not just a TCP handshake).
 #
 # Create the dedicated database + user first (see sql/create-db.sql in
 # this directory), then fill in .env from .env.example before starting.
 #
-# Networks:
-#   - shared: the common network other catalog services deployed
-#     directly on a host (homarr, n8n, ...) join, so cloudflared can
-#     reach this one by container name too once it's tunnel-exposed.
+# Published port, not the "shared" docker network — reachable at
+# ${TAILSCALE_IP}:7576 (never 0.0.0.0, same convention as every other
+# exposed port on this host). Needs TAILSCALE_IP set in .env.
+#
+# IMPORTANT if you point a Cloudflare Tunnel route at this port: every
+# other time this session that cloudflared itself tried to reach a
+# service via this host's OWN Tailscale IP (Grafana, Homarr's original
+# config, node-exporter), it failed with a hairpin-NAT timeout —
+# cloudflared can't loop back through the host's own Tailscale
+# interface, even though other containers reaching the same IP for
+# Postgres/MinIO worked fine (different container, different network
+# path — not the same test). If the tunnel route to this port doesn't
+# work, that's most likely why; the fix that's worked every time so
+# far is joining "shared" and pointing the tunnel at http://spliit:3000
+# (container name) instead.
 
 services:
   spliit:
@@ -30,16 +37,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    networks:
-      - shared
+    ports:
+      - "${TAILSCALE_IP}:7576:3000"
     deploy:
       resources:
         limits:
           memory: 512M
     labels:
       - "com.annogrid.component=application"
-
-networks:
-  shared:
-    name: shared
-    external: true
