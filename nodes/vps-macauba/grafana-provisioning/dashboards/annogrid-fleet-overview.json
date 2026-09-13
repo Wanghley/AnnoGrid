@@ -1,0 +1,181 @@
+{
+  "uid": "annogrid-fleet-overview",
+  "title": "AnnoGrid — Fleet Overview",
+  "tags": ["annogrid", "overview"],
+  "timezone": "",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "role",
+        "type": "query",
+        "label": "Role",
+        "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+        "query": { "query": "label_values(up{job=~\"node-exporter|cluster-nodes\"}, role)", "refId": "StandardVariableQuery" },
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    { "id": 1, "type": "row", "title": "Cluster Health", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
+
+    {
+      "id": 2, "type": "stat", "title": "Nodes Up",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "count(up{job=~\"node-exporter|cluster-nodes\", role=~\"$role\"} == 1)", "refId": "A", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }, "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 3, "type": "stat", "title": "Nodes Down",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "count(up{job=~\"node-exporter|cluster-nodes\", role=~\"$role\"} == 0) OR vector(0)", "refId": "A", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 4, "type": "stat", "title": "Total Nodes",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "count(up{job=~\"node-exporter|cluster-nodes\", role=~\"$role\"})", "refId": "A", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }, "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 5, "type": "stat", "title": "Active Alerts",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "count(ALERTS{alertstate=\"firing\"}) OR vector(0)", "refId": "A", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "none" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 6, "type": "stat", "title": "Avg Fleet CPU",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "avg(100 - (avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\", job=~\"node-exporter|cluster-nodes\", role=~\"$role\"}[5m])) * 100))", "refId": "A", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 85 }] }, "unit": "percent", "max": 100, "min": 0 }, "overrides": [] }
+    },
+    {
+      "id": 7, "type": "stat", "title": "Avg Fleet Memory",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "avg((1 - (node_memory_MemAvailable_bytes{job=~\"node-exporter|cluster-nodes\", role=~\"$role\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|cluster-nodes\", role=~\"$role\"})) * 100)", "refId": "A", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 75 }, { "color": "red", "value": 90 }] }, "unit": "percent", "max": 100, "min": 0 }, "overrides": [] }
+    },
+
+    {
+      "id": 8, "type": "table", "title": "Node Status",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [
+        { "expr": "max by(instance) (up{job=~\"node-exporter|cluster-nodes\", role=~\"$role\"})", "refId": "A", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } },
+        { "expr": "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\", job=~\"node-exporter|cluster-nodes\", role=~\"$role\"}[5m])) * 100)", "refId": "B", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } },
+        { "expr": "(1 - (node_memory_MemAvailable_bytes{job=~\"node-exporter|cluster-nodes\", role=~\"$role\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|cluster-nodes\", role=~\"$role\"})) * 100", "refId": "C", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } },
+        { "expr": "min by(instance) (node_filesystem_avail_bytes{job=~\"node-exporter|cluster-nodes\", role=~\"$role\", fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{job=~\"node-exporter|cluster-nodes\", role=~\"$role\", fstype!~\"tmpfs|overlay\"} * 100)", "refId": "D", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } },
+        { "expr": "max by(instance) (node_load1{job=~\"node-exporter|cluster-nodes\", role=~\"$role\"})", "refId": "E", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } }
+      ],
+      "transformations": [
+        { "id": "joinByField", "options": { "byField": "instance", "mode": "outer" } },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {},
+            "excludeByName": { "Time 1": true, "Time 2": true, "Time 3": true, "Time 4": true, "Time 5": true, "Time": true },
+            "renameByName": {
+              "instance": "Node",
+              "Value #A": "Up",
+              "Value #B": "CPU %",
+              "Value #C": "Memory %",
+              "Value #D": "Min Disk Free %",
+              "Value #E": "Load (1m)"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Up" }, "properties": [{ "id": "custom.cellOptions", "value": { "type": "color-background" } }, { "id": "mappings", "value": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }] }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }] },
+          { "matcher": { "id": "byName", "options": "CPU %" }, "properties": [{ "id": "unit", "value": "percent" }, { "id": "decimals", "value": 1 }, { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "gradient" } }, { "id": "max", "value": 100 }, { "id": "min", "value": 0 }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] } }] },
+          { "matcher": { "id": "byName", "options": "Memory %" }, "properties": [{ "id": "unit", "value": "percent" }, { "id": "decimals", "value": 1 }, { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "gradient" } }, { "id": "max", "value": 100 }, { "id": "min", "value": 0 }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 75 }, { "color": "red", "value": 90 }] } }] },
+          { "matcher": { "id": "byName", "options": "Min Disk Free %" }, "properties": [{ "id": "unit", "value": "percent" }, { "id": "decimals", "value": 1 }, { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "gradient" } }, { "id": "max", "value": 100 }, { "id": "min", "value": 0 }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 15 }, { "color": "green", "value": 30 }] } }] },
+          { "matcher": { "id": "byName", "options": "Load (1m)" }, "properties": [{ "id": "decimals", "value": 2 }] }
+        ]
+      }
+    },
+
+    { "id": 9, "type": "row", "title": "Resource Trends", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 }, "panels": [] },
+
+    {
+      "id": 10, "type": "timeseries", "title": "CPU Usage % by Node",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\", job=~\"node-exporter|cluster-nodes\", role=~\"$role\"}[5m])) * 100)", "legendFormat": "{{instance}}", "refId": "A", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } }],
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0, "custom": { "drawStyle": "line", "fillOpacity": 10, "spanNulls": true } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 11, "type": "timeseries", "title": "Memory Usage % by Node",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "(1 - (node_memory_MemAvailable_bytes{job=~\"node-exporter|cluster-nodes\", role=~\"$role\"} / node_memory_MemTotal_bytes{job=~\"node-exporter|cluster-nodes\", role=~\"$role\"})) * 100", "legendFormat": "{{instance}}", "refId": "A", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } }],
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0, "custom": { "drawStyle": "line", "fillOpacity": 10, "spanNulls": true } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+
+    {
+      "id": 12, "type": "timeseries", "title": "Network Throughput by Node",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [
+        { "expr": "sum by(instance) (rate(node_network_receive_bytes_total{job=~\"node-exporter|cluster-nodes\", role=~\"$role\", device!~\"lo|veth.*|docker.*|br-.*\"}[5m]))", "legendFormat": "{{instance}} rx", "refId": "A", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } },
+        { "expr": "sum by(instance) (rate(node_network_transmit_bytes_total{job=~\"node-exporter|cluster-nodes\", role=~\"$role\", device!~\"lo|veth.*|docker.*|br-.*\"}[5m]))", "legendFormat": "{{instance}} tx", "refId": "B", "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "drawStyle": "line", "fillOpacity": 10, "spanNulls": true } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 13, "type": "bargauge", "title": "Min Filesystem Free % by Node",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "min by(instance) (node_filesystem_avail_bytes{job=~\"node-exporter|cluster-nodes\", role=~\"$role\", fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{job=~\"node-exporter|cluster-nodes\", role=~\"$role\", fstype!~\"tmpfs|overlay\"} * 100)", "legendFormat": "{{instance}}", "refId": "A", "instant": true, "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } }],
+      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 15 }, { "color": "green", "value": 30 }] } }, "overrides": [] },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } }
+    },
+
+    { "id": 14, "type": "row", "title": "Logs & Alerts", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 }, "panels": [] },
+
+    {
+      "id": 15, "type": "timeseries", "title": "Log Ingestion Rate by Host",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+      "targets": [{ "expr": "sum by(host) (rate({host=~\".+\"}[$__interval]))", "legendFormat": "{{host}}", "refId": "A", "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" } }],
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "spanNulls": true } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 16, "type": "table", "title": "Active Alerts",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "targets": [{ "expr": "ALERTS{alertstate=\"firing\"}", "refId": "A", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" } }],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "alertstate": true }, "renameByName": { "alertname": "Alert", "instance": "Node", "severity": "Severity", "job": "Job" } } }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" } } }, "overrides": [{ "matcher": { "id": "byName", "options": "Severity" }, "properties": [{ "id": "custom.cellOptions", "value": { "type": "color-background" } }, { "id": "mappings", "value": [{ "type": "value", "options": { "critical": { "color": "red" }, "warning": { "color": "orange" } } }] }] }] }
+    }
+  ]
+}

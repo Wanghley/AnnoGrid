@@ -1,0 +1,98 @@
+{
+  "uid": "annogrid-logs-explorer",
+  "title": "AnnoGrid — Logs Explorer",
+  "tags": ["annogrid", "logs"],
+  "timezone": "",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-3h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "host",
+        "type": "query",
+        "label": "Host",
+        "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+        "query": { "query": "label_values(host)", "refId": "StandardVariableQuery" },
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" }
+      },
+      {
+        "name": "logjob",
+        "label": "Log Source",
+        "type": "custom",
+        "query": "varlogs, docker",
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    { "id": 1, "type": "row", "title": "Overview", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "panels": [] },
+    {
+      "id": 2, "type": "stat", "title": "Total Log Rate",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+      "targets": [{ "expr": "sum(rate({host=~\"$host\", job=~\"$logjob\"}[5m]))", "refId": "A", "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" } }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "ops", "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } }, "overrides": [] }
+    },
+    {
+      "id": 3, "type": "stat", "title": "Error/Warn/Fatal Rate",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+      "targets": [{ "expr": "sum(rate({host=~\"$host\", job=~\"$logjob\"} |~ \"(?i)error|panic|fatal\" [5m]))", "refId": "A", "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" } }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area" },
+      "fieldConfig": { "defaults": { "unit": "ops", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.1 }, { "color": "red", "value": 1 }] } }, "overrides": [] }
+    },
+    {
+      "id": 4, "type": "timeseries", "title": "Log Volume by Host",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+      "targets": [{ "expr": "sum by(host) (rate({host=~\"$host\", job=~\"$logjob\"}[$__interval]))", "legendFormat": "{{host}}", "refId": "A", "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" } }],
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "spanNulls": true, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Log Volume by Source",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+      "targets": [{ "expr": "sum by(job) (rate({host=~\"$host\", job=~\"$logjob\"}[$__interval]))", "legendFormat": "{{job}}", "refId": "A", "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" } }],
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "spanNulls": true, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+
+    { "id": 6, "type": "row", "title": "Errors & Warnings", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 }, "panels": [] },
+    {
+      "id": 7, "type": "timeseries", "title": "Error Rate by Host",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 14 },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+      "targets": [{ "expr": "sum by(host) (rate({host=~\"$host\", job=~\"$logjob\"} |~ \"(?i)error|panic|fatal\" [5m]))", "legendFormat": "{{host}}", "refId": "A", "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" } }],
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "spanNulls": true } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 8, "type": "logs", "title": "Errors / Warnings (live)",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 21 },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+      "targets": [{ "expr": "{host=~\"$host\", job=~\"$logjob\"} |~ \"(?i)error|warn|fail|panic|fatal\"", "refId": "A", "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" } }],
+      "options": { "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true, "enableLogDetails": true }
+    },
+
+    { "id": 9, "type": "row", "title": "Live Logs", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 }, "panels": [] },
+    {
+      "id": 10, "type": "logs", "title": "All Logs",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 32 },
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+      "targets": [{ "expr": "{host=~\"$host\", job=~\"$logjob\"}", "refId": "A", "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" } }],
+      "options": { "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true, "enableLogDetails": true }
+    }
+  ]
+}
