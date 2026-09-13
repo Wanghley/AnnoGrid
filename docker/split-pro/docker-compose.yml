@@ -1,0 +1,87 @@
+# split-pro — self-hosted expense splitting (Splitwise alternative).
+# https://github.com/oss-apps/split-pro
+#
+# Unlike Spliit (the app this replaced), split-pro's Prisma schema maps
+# directly onto pg_cron's own internal tables (cron.job,
+# cron.job_run_details) — not an optional feature, baked into the core
+# schema. That needs a Postgres built with the pg_cron extension and
+# `shared_preload_libraries=pg_cron` set at server startup, which the
+# shared core-data-postgres instance (plain postgres:18-alpine) doesn't
+# have. Retrofitting that onto shared infra would mean a full restart
+# affecting every other database on it (Grafana, n8n, Twenty, Tandoor,
+# ...) — not worth it for one app. So this bundles its own dedicated
+# Postgres instead, using the project's own pg_cron-enabled image,
+# matching their official docker/prod/compose.yml.
+#
+# The two containers talk to each other over this compose project's own
+# private network (splitpro-db:5432) — that's normal same-project
+# docker networking, not the host's Tailscale interface, so none of the
+# hairpin-NAT issues found elsewhere in this repo's history apply here.
+#
+# Only the app's own port is published, on the Tailscale IP (never
+# 0.0.0.0) — Postgres stays fully internal, no host port at all.
+# HOSTNAME=0.0.0.0 is required (not just the upstream default comment)
+# for the published port to actually reach the app: without it, the
+# Next.js server only binds to localhost inside the container, which
+# docker's port forwarding can't reach.
+#
+# Copy .env.example to .env and fill in NEXTAUTH_SECRET / POSTGRES_PASSWORD
+# before starting.
+
+name: split-pro
+
+services:
+  postgres:
+    image: ossapps/postgres:17.7-trixie
+    container_name: splitpro-db
+    restart: always
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:?err}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?err}
+      - POSTGRES_DB=${POSTGRES_DB:?err}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_cron
+      -c cron.database_name=${POSTGRES_DB:-splitpro}
+      -c cron.timezone=UTC
+    env_file: .env
+    volumes:
+      - database:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    labels:
+      - "com.annogrid.component=database"
+
+  splitpro:
+    image: ossapps/splitpro:latest
+    container_name: splitpro
+    restart: always
+    ports:
+      - "${TAILSCALE_IP}:${HOST_PORT:-7576}:${PORT:-3000}"
+    environment:
+      - PORT=${PORT:-3000}
+      - HOSTNAME=0.0.0.0
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    labels:
+      - "com.annogrid.component=application"
+
+volumes:
+  database:
+  uploads:
