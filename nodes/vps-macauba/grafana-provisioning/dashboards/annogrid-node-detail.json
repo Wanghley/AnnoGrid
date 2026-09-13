@@ -17,7 +17,7 @@
         "label": "Node",
         "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
         "query": { "query": "label_values(up{job=~\"node-exporter|cluster-nodes\"}, instance)", "refId": "StandardVariableQuery" },
-        "refresh": 2,
+        "refresh": 1,
         "sort": 1,
         "multi": false,
         "includeAll": false,

@@ -17,7 +17,7 @@
         "label": "Host",
         "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
         "query": { "query": "label_values(host)", "refId": "StandardVariableQuery" },
-        "refresh": 2,
+        "refresh": 1,
         "sort": 1,
         "multi": true,
         "includeAll": true,
