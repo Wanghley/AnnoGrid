@@ -52,6 +52,11 @@ services:
     container_name: cadvisor
     restart: always
     privileged: true
+    ports:
+      # Tailscale-only, matching every other exposed port on this node —
+      # lets Homarr (on vps-macauba) ping this for a live health check
+      # instead of showing a permanent false "down".
+      - "${TAILSCALE_IP}:8080:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
