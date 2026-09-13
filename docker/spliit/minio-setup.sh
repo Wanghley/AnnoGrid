@@ -1,21 +1,28 @@
 #!/usr/bin/env bash
 # Run this yourself against your MinIO — creates a bucket-scoped user for
-# Spliit instead of using the MinIO root credentials in its .env. Needs
-# the `mc` (MinIO Client) CLI: https://min.io/docs/minio/linux/reference/minio-mc.html
+# Spliit instead of using the MinIO root credentials in its .env.
 #
-# Usage:
-#   MINIO_ROOT_USER=... MINIO_ROOT_PASSWORD=... ./minio-setup.sh
+# MinIO itself runs in a container, so this runs via the official mc
+# image too rather than installing mc on the host:
 #
-# Substitute your actual MinIO root credentials (docker inspect
-# core-data-minio, or whatever you set MINIO_ROOT_USER/PASSWORD to) —
-# not hardcoded here on purpose.
+#   docker run --rm -e MINIO_ROOT_USER -e MINIO_ROOT_PASSWORD \
+#     -v "$(pwd)/minio-setup.sh:/minio-setup.sh:ro" \
+#     --entrypoint bash quay.io/minio/mc:latest /minio-setup.sh
+#
+# with MINIO_ROOT_USER / MINIO_ROOT_PASSWORD exported in your shell first
+# (docker inspect core-data-minio --format '{{range .Config.Env}}{{println .}}{{end}}' | grep MINIO_ROOT
+# if you need to look them up).
+#
+# Note: quay.io/minio/mc is a minimal RHEL UBI image with no `openssl` —
+# the secret below is generated from /dev/urandom + od/tr instead, both
+# of which are present.
 
 set -euo pipefail
 
 MINIO_ENDPOINT="http://100.111.147.14:9000"
 BUCKET="spliit-vps-macauba"
 SPLIIT_USER="spliit"
-SPLIIT_SECRET="$(openssl rand -hex 24)"
+SPLIIT_SECRET="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 
 : "${MINIO_ROOT_USER:?Set MINIO_ROOT_USER}"
 : "${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD}"
