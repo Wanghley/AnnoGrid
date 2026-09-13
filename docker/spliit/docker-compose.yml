@@ -1,0 +1,47 @@
+# Spliit — self-hosted expense splitting (Splitwise alternative).
+# https://github.com/spliit-app/spliit
+#
+# Uses the project's published image instead of building from source
+# (consistent with every other catalog entry here, and avoids a Next.js
+# build on whatever host this runs on).
+#
+# No postgres service here — this points at an existing, separately
+# managed Postgres instance instead of bundling its own (see the
+# upstream project's own compose.yaml for the bundled-db version).
+# Create the dedicated database + user first (see sql/create-db.sql in
+# this directory), then fill in .env from .env.example before starting.
+#
+# Networks:
+#   - core-data: reaches the existing Postgres by container name
+#     (core-data-postgres). Do NOT point this at the host's Tailscale
+#     IP instead — a container can't reach its own host's Tailscale
+#     IP (hairpin NAT), the same issue diagnosed for Grafana's
+#     Cloudflare Tunnel earlier in this repo's history.
+#   - shared: the common network other catalog services deployed
+#     directly on a host (homarr, n8n, ...) join, so cloudflared can
+#     reach this one by container name too once it's tunnel-exposed.
+
+services:
+  spliit:
+    image: ghcr.io/spliit-app/spliit:latest
+    container_name: spliit
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - core-data
+      - shared
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    labels:
+      - "com.annogrid.component=application"
+
+networks:
+  core-data:
+    name: core-data_core-data
+    external: true
+  shared:
+    name: shared
+    external: true
