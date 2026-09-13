@@ -1,0 +1,36 @@
+# Sits between Homarr's embedded-panel iframes and Grafana, rewriting the
+# HTML response to strip the "Powered by Grafana" badge — that badge lives
+# inside Grafana's own document, which no amount of CSS on Homarr's side
+# can reach (different origin, separate document). This proxy edits the
+# HTML server-side, before it ever reaches the browser, which is the only
+# way to actually remove it in Grafana OSS (white-labeling is an
+# Enterprise-licensed feature).
+#
+# Deploy this on the same host as Grafana (vps-macauba) — it proxies to
+# the "grafana" container by name over the "vps-macauba" docker network.
+# Point a dedicated Cloudflare Tunnel hostname (e.g.
+# grafana-embed.wanghley.com) at this container's port 8091, and use that
+# hostname — not grafana.wanghley.com directly — for Homarr's iframe URLs.
+# Normal Grafana browsing is untouched.
+
+services:
+  grafana-embed-proxy:
+    image: nginx:alpine
+    container_name: grafana-embed-proxy
+    restart: always
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - vps-macauba
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+    labels:
+      - "com.annogrid.component=networking"
+      - "com.annogrid.node=anno-gw-vps-macauba-01"
+
+networks:
+  vps-macauba:
+    name: vps-macauba
+    external: true
