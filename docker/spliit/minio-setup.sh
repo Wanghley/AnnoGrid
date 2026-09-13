@@ -13,7 +13,7 @@
 set -euo pipefail
 
 MINIO_ENDPOINT="http://100.111.147.14:9000"
-BUCKET="spliit"
+BUCKET="spliit-vps-macauba"
 SPLIIT_USER="spliit"
 SPLIIT_SECRET="$(openssl rand -hex 24)"
 
