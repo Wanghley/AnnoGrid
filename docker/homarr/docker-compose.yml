@@ -20,6 +20,10 @@ services:
     networks:
       - default
       - shared
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
 networks:
   shared:

@@ -32,6 +32,13 @@ services:
       - grafana
     networks:
       - vps-macauba
+      # Also on "shared" — the common network other catalog services
+      # deployed directly on this host (docker/homarr, docker/n8n, etc.)
+      # join, so cloudflared can reach them by container name
+      # (http://homarr:7575) instead of hairpinning back through this
+      # host's own Tailscale IP, which doesn't work from inside a
+      # container — see the Grafana tunnel fix for why.
+      - shared
     deploy:
       resources:
         limits:
@@ -130,6 +137,12 @@ networks:
   vps-macauba:
     name: vps-macauba
     driver: bridge
+  # Pre-existing network created by other catalog stacks deployed
+  # directly on this host (docker/homarr, docker/n8n, ...). Not owned
+  # by this compose project — just attaching cloudflared to it.
+  shared:
+    name: shared
+    external: true
 
 volumes:
   promtail-data:
