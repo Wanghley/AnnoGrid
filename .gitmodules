@@ -4,3 +4,6 @@
 [submodule "arlo/voice-matching/arlo/voice-matching/wyoming-voice-match"]
 	path = arlo/voice-matching/arlo/voice-matching/wyoming-voice-match
 	url = https://github.com/jxlarrea/wyoming-voice-match.git
+[submodule "services/cal.diy"]
+	path = services/cal.diy
+	url = https://github.com/Wanghley/cal.diy.git
