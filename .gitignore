@@ -85,7 +85,6 @@ backups/
 !docker-compose.override.yml.example
 
 # ignore data folder from Docker
-**/ha-config/
 **/piper-data/
 **/whisper-data/
 **/voice_profiles/

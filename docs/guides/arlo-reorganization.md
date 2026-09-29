@@ -82,18 +82,7 @@ curl http://100.x.x.x:8080/api/status
 curl https://voice.yourdomain.com/api/status
 ```
 
-### Integrate with Home Assistant
-
-Add to Home Assistant's `configuration.yaml`:
-
-```yaml
-intent_script:
-  voice_command:
-    action:
-      service: rest_command.execute_voice_action
-      data_template:
-        command: "{{ trigger.payload_json.text }}"
-```
+> Home Assistant integration was removed from this node (2026-09-29).
 
 ---
 

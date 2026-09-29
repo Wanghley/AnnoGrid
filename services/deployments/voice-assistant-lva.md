@@ -350,20 +350,6 @@ cap_add:
 
 ## 📚 Integration Examples
 
-### With Home Assistant
-
-```yaml
-# configuration.yaml
-intent_script:
-  TurnOn:
-    speech:
-      text: "Turning on {{ state_attr('trigger.payload_json', 'entity_id') }}"
-    action:
-      service: homeassistant.turn_on
-      data_template:
-        entity_id: "{{ trigger.payload_json.entity_id }}"
-```
-
 ### With N8n Automation
 
 Create webhook that receives voice commands:
@@ -393,7 +379,7 @@ aplay -D plughw:1,0 soundfile.wav  # Play on specific device
 ```bash
 # Future: Deploy LVA on multiple nodes
 # Each node runs independent instance
-# Coordinate via N8n/Home Assistant
+# Coordinate via N8n
 ```
 
 ---

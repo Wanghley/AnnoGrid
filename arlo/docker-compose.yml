@@ -1,13 +1,7 @@
 services:
-  # Home Assistant Core
-  homeassistant:
-    container_name: homeassistant
-    image: "ghcr.io/home-assistant/home-assistant:stable"
-    volumes:
-      - ./ha-config:/config
-      - /etc/localtime:/etc/localtime:ro
-    restart: unless-stopped
-    network_mode: host
+  # Home Assistant was removed from this node entirely (2026-09-29): ai-jacaranda is scoped
+  # to AI + monitoring only. The Wyoming voice services below (whisper/piper/openwakeword)
+  # are kept, but nothing on this node consumes them any more.
 
   # The Ears: NVIDIA Optimized Whisper
   whisper:
