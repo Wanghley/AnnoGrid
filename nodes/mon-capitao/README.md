@@ -92,6 +92,42 @@ Prometheus watches it and hot-reloads on save — no restart needed. Don't add
 peer targets anywhere else; that duplication is exactly what caused this
 stack to have three different guessed IPs for the same node before.
 
+## AI node scrape (LiteLLM + container metrics for ai-jacaranda)
+
+Two jobs in [`prometheus.yml`](prometheus-config/prometheus.yml) cover the AI node beyond the
+node-exporter it already gets via `cluster-nodes.yml`:
+
+- **`litellm`** — the gateway's `/metrics/` (requests, latency, tokens, spend, failures per model/key).
+  Needs a scoped key; the Prometheus key can read `/metrics` and nothing else.
+- **`cadvisor-ai`** — that node's cAdvisor, trimmed to CPU/RAM/network (~360 series). Deliberately a separate
+  job: the "Gateway Services" dashboard aggregates `container_*`, and its queries are pinned to
+  `instance="mon-capitao"` so this node's containers don't leak into it.
+
+Safe deploy order — **the secret file must exist and be world-readable before Prometheus (re)starts**,
+otherwise the config fails to load and `restart: always` loops the container:
+
+```bash
+cd <repo>/nodes/mon-capitao            # this node's checkout of the repo
+git pull                               # gets prometheus.yml + the secrets mount in docker-compose.yml
+
+# 1. credentials (copy the value of LITELLM_KEY_PROMETHEUS from ai-jacaranda's litellm/.env)
+mkdir -p prometheus-config/secrets
+printf '%s' 'sk-...' > prometheus-config/secrets/litellm_key
+chmod 644 prometheus-config/secrets/litellm_key     # nobody-in-container must read it; key is /metrics-only
+
+# 2. validate BEFORE applying (uses the same image the running container uses)
+docker run --rm --entrypoint promtool -v "$PWD/prometheus-config:/etc/prometheus:ro" \
+  "$(docker inspect -f '{{.Config.Image}}' prometheus)" check config /etc/prometheus/prometheus.yml
+
+# 3. apply — recreates the container (new volume mount); data volume is kept, ~10 s scrape gap
+docker compose up -d prometheus
+
+# 4. verify
+curl -s localhost:9090/api/v1/targets | grep -o '"job":"\(litellm\|cadvisor-ai\)"[^}]*"health":"[a-z]*"'
+```
+
+Later config edits (no new mounts) only need step 2 then `curl -X POST localhost:9090/-/reload`.
+
 ## Shipping logs/metrics from other nodes
 
 Every other node (app/AI/NAS/gateway-VPS) runs the sidecar in

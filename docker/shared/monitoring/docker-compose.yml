@@ -14,7 +14,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
-      - "2375:2375"
+      - "${TAILSCALE_IP}:2375:2375"
     read_only: true
     tmpfs:
       - /run
@@ -24,7 +24,7 @@ services:
     container_name: node-exporter
     restart: always
     ports:
-      - "9100:9100"
+      - "${TAILSCALE_IP}:9100:9100"
     volumes:
       - /:/host:ro,rslave
       - /proc:/host/proc:ro
@@ -47,13 +47,32 @@ services:
     container_name: cadvisor
     restart: always
     ports:
-      - "8080:8080"
+      - "${TAILSCALE_IP}:8082:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
     privileged: true
+    # On ai-jacaranda (8 GB shared with the LLMs) cAdvisor showed >1 GB in `docker stats`. Its real
+    # process memory is tiny (~16 MB); the rest is reclaimable kernel dentry/inode SLAB, charged to
+    # its cgroup because it walks every container's filesystem to compute disk usage. On a Jetson
+    # that cache competes with GPU allocations, so: the `disk` metric group (the du-style scan,
+    # container_fs_usage_bytes) is off, plus 30s housekeeping, docker containers only and the
+    # heavy per-CPU/scheduler/TCP groups off. cpu/memory/network/diskIO stay on. The hard cap
+    # below bounds whatever cache remains.
+    command:
+      - '--housekeeping_interval=30s'
+      - '--max_housekeeping_interval=60s'
+      - '--docker_only=true'
+      - '--storage_duration=1m'
+      - '--disable_metrics=advtcp,cpu_topology,cpuset,disk,hugetlb,memory_numa,percpu,process,referenced_memory,resctrl,sched,tcp,udp'
+    environment:
+      - GOMEMLIMIT=256MiB
+    deploy:
+      resources:
+        limits:
+          memory: 384M
     labels:
       homepage.group: anno-nas
       homepage.name: cAdvisor

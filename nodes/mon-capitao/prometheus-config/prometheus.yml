@@ -47,6 +47,23 @@ scrape_configs:
           instance: mon-capitao
           role: gateway-monitoring
 
+  # ai-jacaranda's cAdvisor (its Tailscale IP, :8082): per-container RAM/CPU for the AI stack.
+  # Ollama runs on the host, so it shows as (host used - sum of containers).
+  # A SEPARATE job (not a second target of `cadvisor` above) on purpose: the "Gateway Services
+  # (mon-capitao)" dashboard queries container_* with no instance filter, and the full cAdvisor
+  # output is ~2000 series for this node's ~20 containers. Keep only what the AI dashboard uses
+  # (~200 series). Those two gateway-services queries now filter on instance="mon-capitao".
+  - job_name: cadvisor-ai
+    static_configs:
+      - targets: ['100.85.193.49:8082']
+        labels:
+          instance: ai-jacaranda
+          role: ai
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: "container_(cpu_usage_seconds_total|memory_working_set_bytes|memory_usage_bytes|spec_memory_limit_bytes|network_(receive|transmit)_bytes_total|oom_events_total|start_time_seconds|last_seen)"
+        action: keep
+
   # The rest of the gateway monitoring stack — self-scraped over the local
   # mon-capitao docker network so their own /metrics (ingestion rates,
   # alert counts, log processing, etc.) show up in Grafana too, not just
@@ -71,6 +88,38 @@ scrape_configs:
         labels:
           instance: mon-capitao
           role: gateway-monitoring
+
+  # LiteLLM gateway on ai-jacaranda: per-model requests, latency, tokens, spend, failures.
+  # /metrics requires a key, so this uses the scoped `prometheus` key (its allowed_routes are
+  # /metrics only — it can't call a model or read anything else). The key lives in
+  # secrets/litellm_key (git-ignored, mounted read-only into the container):
+  #   grep ^LITELLM_KEY_PROMETHEUS= docker/ai-jetson-orin/litellm/.env | cut -d= -f2- \
+  #     > nodes/mon-capitao/prometheus-config/secrets/litellm_key && chmod 644 that-file
+  # Mode 644, NOT 600: Prometheus runs as `nobody` inside the container and must be able to read
+  # it (a 600 root-owned file fails the config load -> restart loop). Low risk: the key can only
+  # read /metrics. Create the file BEFORE (re)starting Prometheus — a missing file also fails the load.
+  # Trailing slash on the path avoids LiteLLM's 307 redirect.
+  - job_name: litellm
+    metrics_path: /metrics/
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/secrets/litellm_key
+    static_configs:
+      - targets: ["100.85.193.49:4001"]
+        labels:
+          instance: ai-jacaranda
+          role: ai
+    # Keep this light — mon-capitao's Prometheus has a 256 MB limit (~100 MB used, ~10k series).
+    # LiteLLM exports ~90 families labelled with client_ip / user_agent / key hash / model_id, and
+    # every histogram multiplies that by 18 buckets, so an unfiltered scrape would add thousands of
+    # series. Drop what no dashboard uses. KEPT: request_total_latency (incl. buckets, for p50/p95),
+    # llm_api_latency and deployment_latency_per_output_token (_sum/_count only, for tokens/sec),
+    # token + spend counters, in-flight, deployment state, failure counters, total-request counters.
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: >-
+          litellm_.*_created|litellm_(request_queue_time_seconds|llm_api_latency_metric|deployment_latency_per_output_token|overhead_latency_metric|overhead_with_guardrails_latency_metric)_bucket|litellm_(overhead_latency_metric|overhead_with_guardrails_latency_metric|request_queue_time_seconds)(_sum|_count)?|litellm_remaining_api_key_(requests|tokens)_for_model|litellm_check_batch_cost_.*|litellm_spend_capture_rate|litellm_deployment_(rpm|tpm)_limit
+        action: drop
 
   # Peer nodes over Tailscale. Targets live in targets/cluster-nodes.yml —
   # Prometheus watches that file and hot-reloads it on change, no restart
