@@ -14,7 +14,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     ports:
-      - "${TAILSCALE_IP}:2375:2375"
+      - "${TAILSCALE_IP:?set TAILSCALE_IP in .env - see .env.example}:2375:2375"
     read_only: true
     tmpfs:
       - /run
@@ -24,7 +24,7 @@ services:
     container_name: node-exporter
     restart: always
     ports:
-      - "${TAILSCALE_IP}:9100:9100"
+      - "${TAILSCALE_IP:?set TAILSCALE_IP in .env - see .env.example}:9100:9100"
     volumes:
       - /:/host:ro,rslave
       - /proc:/host/proc:ro
@@ -47,7 +47,7 @@ services:
     container_name: cadvisor
     restart: always
     ports:
-      - "${TAILSCALE_IP}:8082:8080"
+      - "${TAILSCALE_IP:?set TAILSCALE_IP in .env - see .env.example}:8082:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
