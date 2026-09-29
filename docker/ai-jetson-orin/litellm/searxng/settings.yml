@@ -1,0 +1,18 @@
+# SearXNG for Open WebUI web search. Internal-only (no published port) — Open WebUI
+# reaches it at http://searxng:8080 on the litellm_default network.
+use_default_settings: true
+
+server:
+  # Overridden at runtime by the SEARXNG_SECRET env var (see docker-compose.yml / .env).
+  secret_key: "overridden-by-SEARXNG_SECRET"
+  # The bot limiter is for public instances; this one is only reachable from Open WebUI.
+  limiter: false
+  image_proxy: false
+
+search:
+  # Open WebUI calls /search?format=json — JSON must be enabled or it gets HTTP 403.
+  formats:
+    - html
+    - json
+  safe_search: 0
+  autocomplete: ""

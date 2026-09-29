@@ -1,15 +1,162 @@
 # ============================================================
-# LiteLLM — anno-ai-jetson-orin-01 Complete Stack
-# Durham NC: $0.14/kWh × 2.4 PUE = $0.33/kWh effective
-# Cost: output = Watts / tok_s / 3_600_000 × $0.33
-#        input  = output / 10
-# Updated: May 2026
+# LiteLLM — ai-jacaranda (Jetson Orin Nano 8 GB) gateway
+#
+# THIS FILE IS THE SOURCE OF TRUTH for the model list. Models added through
+# the Admin UI are stored in the local Postgres and merged on top
+# (store_model_in_db), but anything you want to survive a DB wipe belongs here.
+#
+# Naming: local model_name == the Ollama tag, so Open WebUI chats, presets and
+# the fallbacks below resolve the same whether a request goes direct or via here.
+#
+# Cost accounting for local models = electricity, not API fees:
+#   Durham NC: $0.14/kWh × 2.4 PUE = $0.33/kWh effective
+#   output = Watts / tok_s / 3_600_000 × $0.33 ; input = output / 10
+# Models without cost fields have NOT been benchmarked yet and count as $0.
+# See COST.md / calc_llm_cost.py to add one.
+#
+# Memory: 8 GB is shared by GPU + OS + containers, so Ollama can hold ~1 model
+# at a time. Every model below is registered, but only the ones you actually
+# call get loaded.
 # ============================================================
 
-# All models now live in Postgres (added via /model/new) instead of here —
-# manage them in the Admin UI's "Models" tab. store_model_in_db (below) makes
-# the proxy load them from the DB at startup and poll for changes.
-model_list: []
+model_list:
+
+  # ── EMBEDDINGS (ollama/ = /api/embed) ───────────────────────
+  - model_name: nomic-embed-text
+    litellm_params: {model: ollama/nomic-embed-text, api_base: os.environ/OLLAMA_BASE_URL, timeout: 60}
+    model_info: {mode: embedding, max_tokens: 8192, input_cost_per_token: 0.0000000001, output_cost_per_token: 0.0000000010}
+  - model_name: granite-embedding:278m      # multilingual
+    litellm_params: {model: ollama/granite-embedding:278m, api_base: os.environ/OLLAMA_BASE_URL, timeout: 60}
+    model_info: {mode: embedding}
+  - model_name: granite-embedding:30m       # English, fastest
+    litellm_params: {model: ollama/granite-embedding:30m, api_base: os.environ/OLLAMA_BASE_URL, timeout: 60}
+    model_info: {mode: embedding}
+
+  # ── LOCAL CHAT (ollama_chat/ = /api/chat: system roles, tools, vision) ──
+  # Multimodal workhorses
+  - model_name: qwen3.5:4b
+    litellm_params: {model: ollama_chat/qwen3.5:4b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, max_tokens: 32768, supports_vision: true, supports_function_calling: true, input_cost_per_token: 0.0000000417, output_cost_per_token: 0.0000004167}
+  - model_name: qwen3.5:2b
+    litellm_params: {model: ollama_chat/qwen3.5:2b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, max_tokens: 32768, supports_vision: true, supports_function_calling: true, input_cost_per_token: 0.0000000132, output_cost_per_token: 0.0000001316}
+  - model_name: qwen3.5:0.8b
+    litellm_params: {model: ollama_chat/qwen3.5:0.8b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, supports_vision: true}
+  - model_name: gemma4:e2b-it-qat
+    litellm_params: {model: ollama_chat/gemma4:e2b-it-qat, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, supports_vision: true, supports_function_calling: true}
+  - model_name: llama3.2:latest
+    litellm_params: {model: ollama_chat/llama3.2:latest, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, max_tokens: 131072, input_cost_per_token: 0.0000000312, output_cost_per_token: 0.0000003125}
+  - model_name: nemotron-3-nano:4b
+    litellm_params: {model: ollama_chat/nemotron-3-nano:4b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat}
+
+  # Tool use / agents (Nous Hermes 3 — the model, not the removed hermes-agent stack)
+  - model_name: hermes3:3b
+    litellm_params: {model: ollama_chat/hermes3:3b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, supports_function_calling: true, tags: ["agent", "tool-use"]}
+
+  # Structured output / enterprise
+  - model_name: granite4.1:3b
+    litellm_params: {model: ollama_chat/granite4.1:3b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, max_tokens: 128000, input_cost_per_token: 0.0000000357, output_cost_per_token: 0.0000003571, tags: ["structured", "json"]}
+  - model_name: granite3.1-moe:latest
+    litellm_params: {model: ollama_chat/granite3.1-moe:latest, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, tags: ["moe", "fast"]}
+
+  # Math / reasoning
+  - model_name: phi4-mini
+    litellm_params: {model: ollama_chat/phi4-mini, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, max_tokens: 16000, input_cost_per_token: 0.0000000061, output_cost_per_token: 0.0000000611, tags: ["math", "reasoning"]}
+  - model_name: deepseek-r1:1.5b
+    litellm_params: {model: ollama_chat/deepseek-r1:1.5b, api_base: os.environ/OLLAMA_BASE_URL, timeout: 400}
+    model_info: {mode: chat, max_tokens: 32768, input_cost_per_token: 0.0000000031, output_cost_per_token: 0.0000000306, tags: ["reasoning"]}
+  - model_name: lfm2.5-thinking:latest
+    litellm_params: {model: ollama_chat/lfm2.5-thinking:latest, api_base: os.environ/OLLAMA_BASE_URL, timeout: 400}
+    model_info: {mode: chat, max_tokens: 4096, input_cost_per_token: 0.0000000018, output_cost_per_token: 0.0000000183, tags: ["reasoning"]}
+
+  # Code
+  - model_name: qwen2.5-coder:3b
+    litellm_params: {model: ollama_chat/qwen2.5-coder:3b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, max_tokens: 32768, input_cost_per_token: 0.0000000046, output_cost_per_token: 0.0000000458, tags: ["code", "fim"]}
+
+  # Ultra-fast / tiny (good task models for Open WebUI titles + tags)
+  - model_name: granite4:350m
+    litellm_params: {model: ollama_chat/granite4:350m, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, max_tokens: 4096, input_cost_per_token: 0.0000000014, output_cost_per_token: 0.0000000143, tags: ["ultra-fast"]}
+  - model_name: qwen2.5:1.5b
+    litellm_params: {model: ollama_chat/qwen2.5:1.5b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, tags: ["fast"]}
+
+  # Vision
+  - model_name: moondream:latest
+    litellm_params: {model: ollama_chat/moondream:latest, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, supports_vision: true, tags: ["vision", "caption"]}
+
+  # Safety classifier (returns Yes/No risk verdicts — use as a guardrail, not a chatbot)
+  - model_name: granite3-guardian:2b
+    litellm_params: {model: ollama_chat/granite3-guardian:2b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, tags: ["guardrail"]}
+
+  # HTML -> Markdown converter (feed it raw HTML, not questions)
+  - model_name: reader-lm:1.5b
+    litellm_params: {model: ollama_chat/reader-lm:1.5b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, tags: ["html-to-markdown"]}
+
+  # ── OLLAMA CLOUD (needs `ollama signin`; prompts LEAVE this box) ──
+  # glm-5.2:cloud was removed 2026-09-29: Ollama answers HTTP 402 ("not included in your free
+  # usage") on the current plan. Re-add it after adding credits at ollama.com/settings.
+  - model_name: minimax-m3:cloud
+    litellm_params: {model: ollama_chat/minimax-m3:cloud, api_base: os.environ/OLLAMA_BASE_URL, timeout: 300}
+    model_info: {mode: chat, tags: ["cloud"]}
+
+  # Google Gemini was removed 2026-09-29 (AI Studio returned HTTP 402, no credits). To bring it back,
+  # restore GEMINI_API_KEY in .env + docker-compose.yml and add entries like:
+  #   - model_name: gemini-flash
+  #     litellm_params: {model: gemini/gemini-flash-latest, api_key: os.environ/GEMINI_API_KEY}
+  #     model_info: {mode: chat, supports_vision: true, supports_function_calling: true, tags: ["cloud"]}
+
+  # OpenRouter intentionally NOT wired: the key in .env currently returns 401
+  # ("User not found"). Add it back once you have a working key:
+  #   - model_name: "openrouter/*"
+  #     litellm_params: {model: "openrouter/*", api_key: os.environ/OPENROUTER_API_KEY}
+
+  # ── ROLE ALIASES — point clients (IDEs, scripts, agents) at THESE names ──
+  # Swapping the model behind a role is a one-line change here; no client has to change.
+  # Same costs as the model they map to, so spend tracking is unaffected.
+  - model_name: anno-fast        # tiny + non-thinking: titles, routing, classification (4/4 valid JSON titles in testing)
+    litellm_params: {model: ollama_chat/granite4:350m, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, max_tokens: 4096, input_cost_per_token: 0.0000000014, output_cost_per_token: 0.0000000143, tags: ["role"]}
+  - model_name: anno-chat        # default general assistant (multimodal, tool use)
+    litellm_params: {model: ollama_chat/qwen3.5:4b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, max_tokens: 32768, supports_vision: true, supports_function_calling: true, input_cost_per_token: 0.0000000417, output_cost_per_token: 0.0000004167, tags: ["role"]}
+  - model_name: anno-reason      # math / logic
+    litellm_params: {model: ollama_chat/phi4-mini, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, max_tokens: 16000, input_cost_per_token: 0.0000000061, output_cost_per_token: 0.0000000611, tags: ["role"]}
+  - model_name: anno-code
+    litellm_params: {model: ollama_chat/qwen2.5-coder:3b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, max_tokens: 32768, input_cost_per_token: 0.0000000046, output_cost_per_token: 0.0000000458, tags: ["role"]}
+  - model_name: anno-vision      # image understanding
+    litellm_params: {model: ollama_chat/qwen3.5:4b, api_base: os.environ/OLLAMA_BASE_URL}
+    model_info: {mode: chat, max_tokens: 32768, supports_vision: true, input_cost_per_token: 0.0000000417, output_cost_per_token: 0.0000004167, tags: ["role"]}
+  - model_name: anno-embed       # embeddings (768 dims)
+    litellm_params: {model: ollama/nomic-embed-text, api_base: os.environ/OLLAMA_BASE_URL, timeout: 60}
+    model_info: {mode: embedding, max_tokens: 8192, input_cost_per_token: 0.0000000001, output_cost_per_token: 0.0000000010, tags: ["role"]}
+  # Speech, served by the `speaches` container (CPU). Measured: STT ~0.55x realtime (int8),
+  # TTS ~1.2x realtime; English 100% / Portuguese 99% round-trip accuracy.
+  # Kokoro voices include pt-BR (pf_dora, pm_alex, pm_santa) and en (af_heart, am_michael, ...).
+  - model_name: anno-stt
+    litellm_params: {model: openai/Systran/faster-whisper-base, api_base: "http://speaches:8000/v1", api_key: "none"}
+    model_info: {mode: audio_transcription, tags: ["role", "speech"]}
+  - model_name: anno-tts
+    litellm_params: {model: openai/speaches-ai/Kokoro-82M-v1.0-ONNX, api_base: "http://speaches:8000/v1", api_key: "none"}
+    model_info: {mode: audio_speech, tags: ["role", "speech"]}
+  - model_name: anno-cloud       # the one large model that works today; prompts LEAVE this box
+    litellm_params: {model: ollama_chat/minimax-m3:cloud, api_base: os.environ/OLLAMA_BASE_URL, timeout: 300}
+    model_info: {mode: chat, tags: ["role", "cloud"]}
+
 
 # ============================================================
 # LITELLM SETTINGS
@@ -20,42 +167,44 @@ litellm_settings:
   drop_params: true
   set_verbose: false
   json_logs: true
+  # Exposes /metrics (requests, latency, tokens, spend per model/key). Scrape job:
+  # nodes/mon-capitao/prometheus-config/prometheus.yml -> `litellm`.
+  callbacks: ["prometheus"]
 
+  # Local -> local (or cloud -> cloud / cloud -> local) only. There is deliberately
+  # NO local -> cloud fallback: that would silently send prompts off the box.
   fallbacks:
-    - qwen3.5:4b:
-        - qwen3.5:2b
-        - llama3.2:latest
-    - gemma4:e2b:
-        - qwen3.5:4b
-        - qwen3.5:2b
-    - deepseek-r1:1.5b:
-        - lfm2.5-thinking:latest
-    - moondream:
-        - qwen3.5:2b
-    - hermes3:8b:
-        - hermes3:3b
-        - qwen3.5:4b
+    - qwen3.5:4b: [qwen3.5:2b, llama3.2:latest]
+    - gemma4:e2b-it-qat: [qwen3.5:4b, qwen3.5:2b]
+    - deepseek-r1:1.5b: [lfm2.5-thinking:latest]
+    - moondream:latest: [qwen3.5:2b]
+    - hermes3:3b: [qwen3.5:4b]
+    - nemotron-3-nano:4b: [qwen3.5:4b]
+    - minimax-m3:cloud: [qwen3.5:4b]
+    # role aliases
+    - anno-fast: [qwen2.5:1.5b]
+    - anno-chat: [qwen3.5:2b, llama3.2:latest]
+    - anno-reason: [deepseek-r1:1.5b]
+    - anno-code: [qwen3.5:4b]
+    - anno-vision: [qwen3.5:2b, moondream:latest]
+    - anno-cloud: [qwen3.5:4b]
 
   context_window_fallbacks:
-    - qwen3.5:4b:
-        - qwen3.5:2b
+    - qwen3.5:4b: [qwen3.5:2b]
 
 
 # ============================================================
-# ROUTER
+# ROUTER  (single node, single deployment per model — no Redis needed)
 # ============================================================
 router_settings:
   routing_strategy: least-busy
   num_retries: 3
   retry_after: 5
   timeout: 300
-  enable_pre_call_checks: true
-
-  # Shared Redis (core-data stack on app server) so rate limits, budgets,
-  # and router state are enforced globally instead of per worker
-  redis_host: os.environ/REDIS_HOST
-  redis_port: os.environ/REDIS_PORT
-  redis_password: os.environ/REDIS_PASSWORD
+  # OFF: with one deployment per model group it can't filter anything, and for models
+  # missing from LiteLLM's price map (most new Ollama tags) it logs a ModelNotMappedError
+  # stack trace on every request. Ollama truncates over-long prompts itself.
+  enable_pre_call_checks: false
 
 
 # ============================================================
@@ -63,12 +212,12 @@ router_settings:
 # ============================================================
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
-  database_url: os.environ/DATABASE_URL
+  database_url: os.environ/DATABASE_URL     # built in docker-compose.yml -> litellm-postgres
   database_type: "postgres"
-  store_model_in_db: true
-  background_health_checks: true
-  health_check_interval: 1800   # 30min — this box can only load 1 Ollama model at a time,
-                                 # checking all ~17 every 60s just thrashes RAM for no benefit
+  store_model_in_db: true                   # Admin-UI-added models persist in Postgres
+  # OFF on purpose: a background sweep loads EVERY local model in turn (~21 loads
+  # on an 8 GB box) and thrashes RAM. Use GET /health on demand instead.
+  background_health_checks: false
 
   # ── Budget & Spend Tracking ─────────────────────────────────
   # Hard stop when total spend across ALL providers hits this (USD)

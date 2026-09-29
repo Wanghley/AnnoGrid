@@ -1,4 +1,29 @@
 services:
+  # Local Postgres for LiteLLM (virtual keys, spend logs, admin-UI state).
+  # Lives on this node so the gateway has no dependency on another host being
+  # up. Internal-only: no published port, reachable as `postgres` on litellm_default.
+  postgres:
+    image: postgres:16-alpine
+    container_name: litellm-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=litellm
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=litellm
+    # Small footprint: the Orin's 8 GB is shared with the GPU and Ollama models.
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "effective_cache_size=256MB", "-c", "max_connections=50"]
+    volumes:
+      - litellm-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     container_name: litellm-proxy
@@ -9,20 +34,24 @@ services:
     environment:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - LITELLM_LOG=WARNING
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - LITELLM_MAX_BUDGET=${LITELLM_MAX_BUDGET:-20}
+      # Built here (not in .env) so the password has a single source of truth.
+      - DATABASE_URL=postgresql://litellm:${POSTGRES_PASSWORD}@postgres:5432/litellm
     volumes:
       - ./config.yaml:/app/config.yaml
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: ["--config", "/app/config.yaml"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness')\" 2>/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      # First boot runs Prisma migrations against an empty DB — slow on the Orin.
+      start_period: 150s
     labels:
       homepage.group: anno-ai
       homepage.name: LiteLLM
@@ -32,6 +61,70 @@ services:
       homepage.server: anno-ai
       homepage.container: litellm-proxy
 
+  # Private meta-search for Open WebUI's web-search feature. Internal-only: no published port.
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    environment:
+      - SEARXNG_SECRET=${SEARXNG_SECRET:?set SEARXNG_SECRET in .env}
+      - SEARXNG_BASE_URL=http://searxng:8080/
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # OpenAI-compatible speech server (STT: faster-whisper, TTS: Kokoro), CPU-only. Reached by
+  # LiteLLM as anno-stt / anno-tts, and by Open WebUI only through LiteLLM. Internal-only.
+  # (The GPU whisper in ../../../arlo speaks Wyoming, not the OpenAI API, so Open WebUI can't use it.)
+  speaches:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    container_name: speaches
+    restart: unless-stopped
+    environment:
+      - ENABLE_UI=false
+      # Unload models after 2 min idle so they don't sit in RAM next to the LLMs.
+      - STT_MODEL_TTL=120
+      - TTS_MODEL_TTL=120
+      # hf_xet (HF's chunked transfer layer) hung mid-download inside this container while plain
+      # HTTPS to the same CDN ran at 3+ MB/s. Fall back to the plain HTTP client.
+      - HF_HUB_DISABLE_XET=1
+      # int8 Whisper: smaller and faster than the fp32 default on the Orin's CPU cores.
+      - WHISPER__COMPUTE_TYPE=int8
+      # After the TTLs unload the models the process kept ~440 MB resident (allocator retention,
+      # no models loaded). Make glibc mmap big blocks and trim eagerly so freed memory goes back.
+      - MALLOC_ARENA_MAX=2
+      - MALLOC_MMAP_THRESHOLD_=131072
+      - MALLOC_TRIM_THRESHOLD_=131072
+    volumes:
+      - speaches-hf-cache:/home/ubuntu/.cache/huggingface/hub
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    # Measured on this box: ~120 MB idle (models unload after the TTLs above), ~960 MB peak while
+    # Kokoro + Whisper are both loaded. Keep headroom over the peak so a long reply isn't OOM-killed.
+    deploy:
+      resources:
+        limits:
+          memory: 1200M
+
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
@@ -39,11 +132,40 @@ services:
     ports:
       - "${OPEN_WEBUI_PORT}:8080"
     environment:
+      # NOTE: Open WebUI stores most of these in its own DB ("PersistentConfig"); an env var only
+      # applies on a fresh DB or for a key never saved. The existing install was updated directly
+      # in webui.db on 2026-09-29 to match this block, so both agree.
+      #
+      # Everything goes through LiteLLM with a SCOPED key (not the master key). Direct Ollama is off.
       - OPENAI_API_BASE_URL=http://litellm:4000/v1
-      - OPENAI_API_KEY=${LITELLM_MASTER_KEY}
+      - OPENAI_API_KEY=${OPENWEBUI_LITELLM_KEY:?set OPENWEBUI_LITELLM_KEY in .env (mint it with new-key.sh open-webui)}
+      - ENABLE_OLLAMA_API=false
       - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - HF_TOKEN=${HF_TOKEN}
+      # Tiny non-thinking model for titles/tags (4/4 valid title JSON in testing; qwen3.5:* gave 0/4).
+      - TASK_MODEL_EXTERNAL=anno-fast
+      # Embeddings via LiteLLM (nomic-embed-text) instead of an in-container MiniLM.
+      - RAG_EMBEDDING_ENGINE=openai
+      - RAG_EMBEDDING_MODEL=anno-embed
+      - RAG_OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - RAG_OPENAI_API_KEY=${OPENWEBUI_LITELLM_KEY}
+      # Private web search (SearXNG, internal). Sequential fetches keep CPU/RAM spikes down.
+      - ENABLE_WEB_SEARCH=true
+      - WEB_SEARCH_ENGINE=searxng
+      - SEARXNG_QUERY_URL=http://searxng:8080/search?q=<query>
+      - WEB_SEARCH_RESULT_COUNT=3
+      - WEB_SEARCH_CONCURRENT_REQUESTS=1
+      # Speech via LiteLLM -> speaches (CPU). Browser mic input needs HTTPS or localhost.
+      - AUDIO_STT_ENGINE=openai
+      - AUDIO_STT_MODEL=anno-stt
+      - AUDIO_STT_OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - AUDIO_STT_OPENAI_API_KEY=${OPENWEBUI_LITELLM_KEY}
+      - AUDIO_TTS_ENGINE=openai
+      - AUDIO_TTS_MODEL=anno-tts
+      - AUDIO_TTS_VOICE=af_heart
+      - AUDIO_TTS_OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - AUDIO_TTS_OPENAI_API_KEY=${OPENWEBUI_LITELLM_KEY}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -59,3 +181,7 @@ services:
       homepage.description: LLM chat interface
       homepage.server: anno-ai
       homepage.container: open-webui
+
+volumes:
+  litellm-postgres-data:
+  speaches-hf-cache:
