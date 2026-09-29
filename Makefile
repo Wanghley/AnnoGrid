@@ -3,6 +3,11 @@
 
 .PHONY: help health status logs update backup deploy test clean
 
+# AI node = ai-jacaranda (Tailscale MagicDNS). Override: make deploy-ai AI_HOST=... AI_USER=...
+AI_HOST ?= ai-jacaranda
+AI_USER ?= wanghley
+AI_DIR  ?= ~/Workspace/AnnoGrid/docker/ai-jetson-orin
+
 help:
 	@echo "AnnoGrid Cluster Commands"
 	@echo "========================="
@@ -86,7 +91,7 @@ ssh-app:
 	ssh pi@anno-app-opi3bp-01.local
 
 ssh-ai:
-	ssh ubuntu@anno-ai-jetson-orin-nano-01.local
+	ssh $(AI_USER)@$(AI_HOST)
 
 ssh-nas:
 	ssh pi@anno-nas-rpi3bp-01.local
@@ -103,8 +108,8 @@ deploy-app:
 	@ssh pi@anno-app-opi3bp-01.local "cd ~/annogrid && docker compose pull && docker compose up -d"
 
 deploy-ai:
-	@echo "🚀 Deploying AI node services..."
-	@ssh ubuntu@anno-ai-jetson-orin-nano-01.local "cd ~/annogrid && docker compose pull && docker compose up -d"
+	@echo "🚀 Deploying AI node services (LiteLLM + Postgres + Open WebUI)..."
+	@ssh $(AI_USER)@$(AI_HOST) "cd $(AI_DIR)/litellm && ./setup.sh"
 
 deploy-nas:
 	@echo "🚀 Deploying NAS node services..."
@@ -125,9 +130,12 @@ update-app:
 	@echo "📦 Updating app node..."
 	@ssh pi@anno-app-opi3bp-01.local "sudo apt update && sudo apt upgrade -y && docker system prune -a -f"
 
+# Pulls new images for the AI stack only. Deliberately NOT `apt upgrade` (can break the
+# JetPack/CUDA stack) and NOT `docker system prune -a` (deletes images of stopped stacks).
+# Dangling layers only.
 update-ai:
-	@echo "📦 Updating AI node..."
-	@ssh ubuntu@anno-ai-jetson-orin-nano-01.local "sudo apt update && sudo apt upgrade -y && docker system prune -a -f"
+	@echo "📦 Updating AI node stack..."
+	@ssh $(AI_USER)@$(AI_HOST) "cd $(AI_DIR)/litellm && docker compose pull && docker compose up -d && docker image prune -f"
 
 update-nas:
 	@echo "📦 Updating NAS node..."

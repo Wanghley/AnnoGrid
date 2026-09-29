@@ -1,5 +1,13 @@
 # anno-ai-jetson-orin-nano-01: AI/ML Workload Node
 
+> **Now `ai-jacaranda` (Tailscale name). What actually runs here is documented in
+> [`docker/ai-jetson-orin/README.md`](../../docker/ai-jetson-orin/README.md)**: host Ollama →
+> LiteLLM + Postgres → Open WebUI, plus the voice-AI stack in [`arlo/`](../../arlo/) and node
+> metrics from [`docker/shared/monitoring/`](../../docker/shared/monitoring/). This node is scoped to
+> AI + monitoring only. The `docker-compose.yml` in this directory is a legacy template — do **not**
+> `docker compose up` it: it defines a second `node-exporter` that collides with the live one.
+> Deploy with `make deploy-ai` (or `docker/ai-jetson-orin/litellm/setup.sh`).
+
 **Hardware**: NVIDIA Jetson Orin Nano  
 **Role**: GPU-accelerated machine learning workloads  
 **GPU**: 40-core CUDA with 128 tensor cores  

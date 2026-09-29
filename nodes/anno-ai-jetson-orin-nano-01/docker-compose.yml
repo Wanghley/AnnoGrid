@@ -1,5 +1,9 @@
 version: '3.8'
 
+# LEGACY TEMPLATE — DO NOT DEPLOY. The live stack for this node (ai-jacaranda) is
+# docker/ai-jetson-orin/ + docker/shared/monitoring/. The node-exporter below has the same
+# container_name as the live one and would collide with it.
+
 # AI/ML Workload Node (anno-ai-jetson-orin-nano-01)
 # NVIDIA Jetson Orin Nano (8GB RAM, 128GB NVMe)
 # Purpose: GPU-accelerated machine learning inference and processing

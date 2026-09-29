@@ -29,7 +29,8 @@ docker/
 ├── peekaping/               # Uptime monitoring
 ├── homepage/                 # Dashboard (homepage.sh cron + stats.json)
 ├── restore/                   # SD-card recovery tooling — see ../RESTORE.md
-├── ai-jetson-orin/             # AI/ML node stacks (hermes-agent, litellm, monitoring)
+├── ai-jetson-orin/             # ai-jacaranda AI node: litellm(+postgres, open-webui), ollama tuning,
+│                                # homelable — see its README.md
 └── shared/                       # Cross-cutting / not tied to one specific node
     ├── canary/                     # Canary deployment monitoring (runs on NAS)
     ├── general/                     # watchtower (auto-updates)
@@ -75,8 +76,11 @@ into `core-data/`.
 don't map cleanly to one node, so they're grouped under `shared/` instead of
 sitting at the top level.
 
-`docker/ai-jetson-orin/` still nests its sub-stacks the old way — not
-touched in this pass.
+`docker/ai-jetson-orin/` still nests its sub-stacks the old way. It is
+scoped to AI + monitoring only and documented in its own
+[`README.md`](ai-jetson-orin/README.md). Its old pre-migration monitoring hub
+(Prometheus/Alertmanager/Grafana/topology-exporter) was deleted 2026-09-29 — only
+`monitoring/homelable/` remains; see git history for the rest.
 
 ---
 
