@@ -129,18 +129,26 @@ model_list:
   - model_name: anno-fast        # tiny + non-thinking: titles, routing, classification (4/4 valid JSON titles in testing)
     litellm_params: {model: ollama_chat/granite4:350m, api_base: os.environ/OLLAMA_BASE_URL}
     model_info: {mode: chat, max_tokens: 4096, input_cost_per_token: 0.0000000014, output_cost_per_token: 0.0000000143, tags: ["role"]}
+  # anno-chat / anno-vision point at qwen3.5:2b, NOT :4b. Measured 2026-09-29 with the full stack running
+  # (~5 GB used at idle): the 4B runner needs more unified memory than is free, so Ollama loads it ~50% on
+  # the CPU and it could not finish 600 tokens in 280 s; the 2B decodes at 8-10 tok/s. The 4B is still
+  # available by its own name. To move the roles back up, free ~1.5 GB first (see README > Memory budget).
+  # Thinking is OFF by default for these two roles (reasoning_effort: none): measured on the warm 2B model, the
+  # same one-line question took 57.6 s with thinking (270 tokens) vs 2-3 s without (9 tokens). Clients can turn
+  # it back on per request (reasoning_effort: low|medium|high). The raw `qwen3.5:2b` name still thinks by default,
+  # and anno-reason (phi4-mini) is the role for hard reasoning.
   - model_name: anno-chat        # default general assistant (multimodal, tool use)
-    litellm_params: {model: ollama_chat/qwen3.5:4b, api_base: os.environ/OLLAMA_BASE_URL}
-    model_info: {mode: chat, max_tokens: 32768, supports_vision: true, supports_function_calling: true, input_cost_per_token: 0.0000000417, output_cost_per_token: 0.0000004167, tags: ["role"]}
+    litellm_params: {model: ollama_chat/qwen3.5:2b, api_base: os.environ/OLLAMA_BASE_URL, reasoning_effort: "none"}
+    model_info: {mode: chat, max_tokens: 32768, supports_vision: true, supports_function_calling: true, input_cost_per_token: 0.0000000132, output_cost_per_token: 0.0000001316, tags: ["role"]}
   - model_name: anno-reason      # math / logic
     litellm_params: {model: ollama_chat/phi4-mini, api_base: os.environ/OLLAMA_BASE_URL}
     model_info: {mode: chat, max_tokens: 16000, input_cost_per_token: 0.0000000061, output_cost_per_token: 0.0000000611, tags: ["role"]}
   - model_name: anno-code
     litellm_params: {model: ollama_chat/qwen2.5-coder:3b, api_base: os.environ/OLLAMA_BASE_URL}
     model_info: {mode: chat, max_tokens: 32768, input_cost_per_token: 0.0000000046, output_cost_per_token: 0.0000000458, tags: ["role"]}
-  - model_name: anno-vision      # image understanding
-    litellm_params: {model: ollama_chat/qwen3.5:4b, api_base: os.environ/OLLAMA_BASE_URL}
-    model_info: {mode: chat, max_tokens: 32768, supports_vision: true, input_cost_per_token: 0.0000000417, output_cost_per_token: 0.0000004167, tags: ["role"]}
+  - model_name: anno-vision      # image understanding (qwen3.5:2b is multimodal; see the note above)
+    litellm_params: {model: ollama_chat/qwen3.5:2b, api_base: os.environ/OLLAMA_BASE_URL, reasoning_effort: "none"}
+    model_info: {mode: chat, max_tokens: 32768, supports_vision: true, input_cost_per_token: 0.0000000132, output_cost_per_token: 0.0000001316, tags: ["role"]}
   - model_name: anno-embed       # embeddings (768 dims)
     litellm_params: {model: ollama/nomic-embed-text, api_base: os.environ/OLLAMA_BASE_URL, timeout: 60}
     model_info: {mode: embedding, max_tokens: 8192, input_cost_per_token: 0.0000000001, output_cost_per_token: 0.0000000010, tags: ["role"]}
@@ -175,19 +183,19 @@ litellm_settings:
   # NO local -> cloud fallback: that would silently send prompts off the box.
   fallbacks:
     - qwen3.5:4b: [qwen3.5:2b, llama3.2:latest]
-    - gemma4:e2b-it-qat: [qwen3.5:4b, qwen3.5:2b]
+    - gemma4:e2b-it-qat: [qwen3.5:2b, llama3.2:latest]
     - deepseek-r1:1.5b: [lfm2.5-thinking:latest]
     - moondream:latest: [qwen3.5:2b]
-    - hermes3:3b: [qwen3.5:4b]
-    - nemotron-3-nano:4b: [qwen3.5:4b]
-    - minimax-m3:cloud: [qwen3.5:4b]
+    - hermes3:3b: [qwen3.5:2b]
+    - nemotron-3-nano:4b: [qwen3.5:2b]
+    - minimax-m3:cloud: [qwen3.5:2b]
     # role aliases
     - anno-fast: [qwen2.5:1.5b]
-    - anno-chat: [qwen3.5:2b, llama3.2:latest]
+    - anno-chat: [llama3.2:latest]
     - anno-reason: [deepseek-r1:1.5b]
-    - anno-code: [qwen3.5:4b]
-    - anno-vision: [qwen3.5:2b, moondream:latest]
-    - anno-cloud: [qwen3.5:4b]
+    - anno-code: [qwen3.5:2b]
+    - anno-vision: [moondream:latest]
+    - anno-cloud: [qwen3.5:2b]
 
   context_window_fallbacks:
     - qwen3.5:4b: [qwen3.5:2b]

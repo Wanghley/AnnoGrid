@@ -58,10 +58,10 @@ Swapping the model behind a role is a one-line change in `config.yaml`; no clien
 | Alias | Today | Use for |
 |---|---|---|
 | `anno-fast` | `granite4:350m` | titles, routing, classification (4/4 valid title JSON in testing; `qwen3.5:*` gave 0/4) |
-| `anno-chat` | `qwen3.5:4b` | default assistant, tools, multimodal |
+| `anno-chat` | `qwen3.5:2b`, thinking **off** | default assistant, tools, multimodal (was `:4b` — see Memory budget). ≈ 3 s per short answer vs ≈ 58 s with thinking on |
 | `anno-reason` | `phi4-mini` | math / logic |
 | `anno-code` | `qwen2.5-coder:3b` | code |
-| `anno-vision` | `qwen3.5:4b` | image understanding |
+| `anno-vision` | `qwen3.5:2b`, thinking **off** | image understanding |
 | `anno-embed` | `nomic-embed-text` | embeddings (768-d) |
 | `anno-stt` / `anno-tts` | faster-whisper base · Kokoro-82M | speech (below) |
 | `anno-cloud` | `minimax-m3:cloud` | the one large model that works today — **prompts leave the box** |
@@ -82,7 +82,8 @@ Swapping the model behind a role is a one-line change in `config.yaml`; no clien
 | Ollama cloud (leaves the box) | `minimax-m3:cloud` |
 
 `qwen3.5:*` are **thinking** models: they spend hundreds of tokens reasoning even on trivial prompts, so
-don't use them for short structured tasks.
+don't use them for short structured tasks. `anno-chat` / `anno-vision` switch thinking off by default (`reasoning_effort: none` in
+`config.yaml`); send `reasoning_effort: low|medium|high` in a request to turn it back on, or use the raw `qwen3.5:2b` name.
 
 Fallbacks are local→local, cloud→cloud/local, role→local — **never local→cloud** (would silently send prompts out).
 To add a model: `ollama pull <tag>`, add a block to `config.yaml`, `docker compose restart litellm`.
@@ -146,6 +147,13 @@ Total 7.4 GB. Idle baseline ≈ 4.3 GB used / ≈ 3 GB available; an LLM loads i
 
 LLM sizes: `qwen3.5:4b` 3.4 GB, `phi4-mini` 2.5 GB, `qwen3.5:2b` 2.7 GB, `granite4:350m` 0.85 GB.
 A 4B model **plus** voice output at the same time will push into swap; prefer ≤ 2.7 GB models while using voice.
+
+**Measured 2026-09-29 with the whole stack running (idle ≈ 5 GB used, ≈ 2.3 GB available):** on the Jetson a model's GPU memory shows up as
+the runner's resident memory (the `qwen3.5:2b` runner holds ≈ 3.9 GB), so `qwen3.5:4b` no longer fits: Ollama loaded it ≈ 50 % on the
+CPU and it could not produce 600 tokens in 280 s. `qwen3.5:2b` decodes at 8–10 tok/s (thinking off, ≈ 27 % on the CPU). That is why
+`anno-chat` and `anno-vision` point at the 2B. To move them back to the 4B, first free ≈ 1.5 GB: retire the Wyoming voice stack
+(≈ 0.45 GB), stop Netdata (≈ 0.2–0.3 GB), and/or set `OLLAMA_MAX_LOADED_MODELS=1` (needs sudo). LiteLLM retries a hung request up to
+4 × 300 s plus fallbacks, so a stuck model also piles load onto Ollama — another reason not to leave the default on a model that can't load.
 
 ## Known issues / decisions
 
