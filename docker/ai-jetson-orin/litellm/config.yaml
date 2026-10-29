@@ -152,13 +152,21 @@ model_list:
   - model_name: anno-embed       # embeddings (768 dims)
     litellm_params: {model: ollama/nomic-embed-text, api_base: os.environ/OLLAMA_BASE_URL, timeout: 60}
     model_info: {mode: embedding, max_tokens: 8192, input_cost_per_token: 0.0000000001, output_cost_per_token: 0.0000000010, tags: ["role"]}
-  # Speech, served by the `speaches` container (CPU). Measured: STT ~0.55x realtime (int8),
-  # TTS ~1.2x realtime; English 100% / Portuguese 99% round-trip accuracy.
-  # Kokoro voices include pt-BR (pf_dora, pm_alex, pm_santa) and en (af_heart, am_michael, ...).
+  # Speech. STT is the `speaches` container (CPU, faster-whisper: ~0.55x realtime, int8).
   - model_name: anno-stt
     litellm_params: {model: openai/Systran/faster-whisper-base, api_base: "http://speaches:8000/v1", api_key: "none"}
     model_info: {mode: audio_transcription, tags: ["role", "speech"]}
+  # TTS = Kyutai Pocket TTS on the GPU (`pocket-tts` container, ../tts): en/pt/es/fr/de/it/nl, the SAME cloned
+  # voice in every language (language auto-detected from the text), ~1.6x realtime, first audio ~0.2 s.
+  # Any `voice` that is not a file in ../tts/voices (e.g. Open WebUI's `af_heart`) maps to the default
+  # voice `arlo`; `voice: arlo:pt` or `language: pt` forces a language.
   - model_name: anno-tts
+    litellm_params: {model: openai/pocket-tts, api_base: "http://pocket-tts:8000/v1", api_key: "none", timeout: 60, max_retries: 0, num_retries: 0}
+    model_info: {mode: audio_speech, tags: ["role", "speech"]}
+  # Fallback for anno-tts (see `fallbacks` below): Kokoro-82M on CPU via speaches, ~1.2x realtime, one voice
+  # per language (pt-BR: pf_dora, pm_alex, pm_santa; en: af_heart, am_michael, ...). Keeps working when the
+  # GPU service is down or its image/weights broke.
+  - model_name: anno-tts-kokoro
     litellm_params: {model: openai/speaches-ai/Kokoro-82M-v1.0-ONNX, api_base: "http://speaches:8000/v1", api_key: "none"}
     model_info: {mode: audio_speech, tags: ["role", "speech"]}
   - model_name: anno-cloud       # the one large model that works today; prompts LEAVE this box
@@ -196,6 +204,7 @@ litellm_settings:
     - anno-code: [qwen3.5:2b]
     - anno-vision: [moondream:latest]
     - anno-cloud: [qwen3.5:2b]
+    - anno-tts: [anno-tts-kokoro]
 
   context_window_fallbacks:
     - qwen3.5:4b: [qwen3.5:2b]
@@ -213,6 +222,17 @@ router_settings:
   # missing from LiteLLM's price map (most new Ollama tags) it logs a ModelNotMappedError
   # stack trace on every request. Ollama truncates over-long prompts itself.
   enable_pre_call_checks: false
+  # anno-tts: no retries. A retry only delays the switch to the Kokoro fallback, and a worker cold start
+  # (~10 s) is not an error. Both the deployment's `num_retries: 0` and this policy are needed: litellm_settings'
+  # global num_retries is also applied inside the speech call itself and the policy alone does not stop that.
+  # Everything else keeps the defaults above.
+  model_group_retry_policy:
+    anno-tts:
+      DefaultRetries: 0            # a stopped `pocket-tts` is a connection error, which only DefaultRetries covers
+      TimeoutErrorRetries: 0
+      InternalServerErrorRetries: 0
+      RateLimitErrorRetries: 0
+      BadRequestErrorRetries: 0
 
 
 # ============================================================

@@ -48,7 +48,7 @@ mint() {  # <ENV_VAR> <alias> <extra JSON fields>
 }
 mint OPENWEBUI_LITELLM_KEY  open-webui ''
 mint LITELLM_KEY_IDE        ide        '"models":["anno-code","anno-fast","anno-chat","anno-embed","qwen2.5-coder:3b","nomic-embed-text"],"rpm_limit":60'
-mint LITELLM_KEY_SCRIPTS    scripts    '"models":["anno-fast","anno-chat","anno-reason","anno-code","anno-vision","anno-embed","anno-stt","anno-tts"],"max_budget":5,"budget_duration":"30d","rpm_limit":30'
+mint LITELLM_KEY_SCRIPTS    scripts    '"models":["anno-fast","anno-chat","anno-reason","anno-code","anno-vision","anno-embed","anno-stt","anno-tts","anno-tts-kokoro"],"max_budget":5,"budget_duration":"30d","rpm_limit":30'
 mint LITELLM_KEY_PROMETHEUS prometheus '"allowed_routes":["/metrics","/metrics/"]'
 
 # Stage 2: everything (picks up the real Open WebUI key from .env).
@@ -76,6 +76,13 @@ else:
     print(f"downloaded {model}")
 PY
 done
+
+# Pocket TTS (anno-tts) weights are gated on Hugging Face, so they cannot be fetched unattended. Until they are
+# staged, anno-tts requests fail and LiteLLM falls back to Kokoro (anno-tts-kokoro).
+if [ ! -d ../tts/hf-cache/hub/models--kyutai--pocket-tts ]; then
+  echo "NOTE: Pocket TTS weights are not staged; anno-tts will use the Kokoro fallback until they are." >&2
+  echo "      Accept https://huggingface.co/kyutai/pocket-tts, then: HF_TOKEN=<read token> ../tts/fetch-models.sh" >&2
+fi
 
 echo
 echo "LiteLLM:    http://localhost:${LITELLM_PORT:-4001}   (health: /health/liveliness, metrics: /metrics/)"

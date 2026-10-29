@@ -11,14 +11,16 @@ Scoped to **AI + monitoring only**.
  LiteLLM :4001 ── Postgres (internal)        keys · budgets · spend · admin UI · /metrics
    │   routing · fallbacks · $ cap
    ├──► Ollama :11434   HOST systemd service   21 local models + 1 cloud-hosted
-   ├──► speaches        CPU speech server      STT faster-whisper · TTS Kokoro  (internal)
+   ├──► speaches        CPU speech server      STT faster-whisper · TTS Kokoro = fallback  (internal)
+   ├──► pocket-tts      GPU TTS (Pocket TTS)   anno-tts: 7 languages, ONE cloned voice  (internal)
    └──  Open WebUI ──► SearXNG                 private web search (internal)
 ```
 
 | Path | What | Runs as |
 |---|---|---|
 | [`ollama/`](ollama/) | systemd drop-in for the host Ollama service | host (`systemctl`) |
-| [`litellm/`](litellm/) | LiteLLM + Postgres + SearXNG + speaches + Open WebUI | compose project `litellm` |
+| [`litellm/`](litellm/) | LiteLLM + Postgres + SearXNG + speaches + pocket-tts + Open WebUI | compose project `litellm` |
+| [`tts/`](tts/) | build context, voices and weights for `pocket-tts` ([README](tts/README.md)) | image used by the `litellm` project |
 | [`monitoring/homelable/`](monitoring/homelable/) | network topology map | compose project `homelable` |
 | [`../../arlo/`](../../arlo/) | Wyoming voice services (whisper GPU, piper, wake word) — no consumer since Home Assistant was removed | compose project `arlo` |
 
@@ -63,7 +65,8 @@ Swapping the model behind a role is a one-line change in `config.yaml`; no clien
 | `anno-code` | `qwen2.5-coder:3b` | code |
 | `anno-vision` | `qwen3.5:2b`, thinking **off** | image understanding |
 | `anno-embed` | `nomic-embed-text` | embeddings (768-d) |
-| `anno-stt` / `anno-tts` | faster-whisper base · Kokoro-82M | speech (below) |
+| `anno-stt` | faster-whisper base | speech-to-text (below) |
+| `anno-tts` | Pocket TTS (GPU), fallback `anno-tts-kokoro` = Kokoro-82M | text-to-speech, 7 languages, one voice (below) |
 | `anno-cloud` | `minimax-m3:cloud` | the one large model that works today — **prompts leave the box** |
 
 ### Everything installed
@@ -91,11 +94,21 @@ Cost fields are electricity estimates ([`litellm/COST.md`](litellm/COST.md)); mo
 
 ### Speech
 
-`speaches` (CPU) serves the OpenAI audio API; LiteLLM fronts it as `anno-stt` / `anno-tts`.
-Measured here: STT ≈ 0.55× realtime, TTS ≈ 1.2× realtime (so long replies can gap between sentences);
-round-trip accuracy 100% English / 99% Portuguese. Kokoro voices include pt-BR (`pf_dora`, `pm_alex`,
-`pm_santa`) and English (`af_heart`, `am_michael`, …); change `AUDIO_TTS_VOICE` in the compose file and
-Admin → Settings → Audio. **Browser mic input needs HTTPS (or localhost)** — plain `http://<tailscale-ip>:8080`
+**TTS — `anno-tts` = Kyutai Pocket TTS on the GPU** ([`tts/`](tts/README.md), container `pocket-tts`). English,
+Portuguese, Spanish, French, German, Italian and Dutch, the language auto-detected from the text, all spoken in the
+**same cloned voice** ([`tts/voices/arlo.wav`](tts/voices/)). Measured here: ≈ 1.6× realtime once a language is loaded,
+first audio ≈ 0.2 s when streaming, +≈ 2.5 s when a language has to be loaded (2 stay resident), +≈ 10 s for the first
+request after the GPU worker went idle. Open WebUI keeps sending the voice `af_heart`; Pocket maps any unknown voice to
+`arlo`, so nothing changed on its side. The weights are gated on Hugging Face — one-time setup in the
+[tts README](tts/README.md#setup).
+
+**Fallback:** if the GPU service is down or fails, LiteLLM answers from **Kokoro-82M on the CPU** (`anno-tts-kokoro` in
+`speaches`: ≈ 1.2× realtime, one voice per language, pt-BR voices `pf_dora` / `pm_alex` / `pm_santa`) within ≈ 2–3 s.
+That is a different voice and `af_heart` reads every language, so treat it as degraded service. Keys with an explicit model
+list (`LITELLM_KEY_SCRIPTS`) must include `anno-tts-kokoro`, or LiteLLM refuses the fallback ("caller is not authorized").
+
+**STT — `anno-stt`:** `speaches` (CPU, faster-whisper base) ≈ 0.55× realtime; round-trip accuracy 100% English / 99% Portuguese
+(measured with Kokoro audio). **Browser mic input needs HTTPS (or localhost)** — plain `http://<tailscale-ip>:8080`
 is blocked by the browser; see "Not done" below.
 
 ## Keys
@@ -143,10 +156,14 @@ Total 7.4 GB. Idle baseline ≈ 4.3 GB used / ≈ 3 GB available; an LLM loads i
 | speaches | 125 MB fresh · 182 MB after use · ≈ 740 MB while speaking | models unload ~4.5 min after last use; `MALLOC_*` settings cut post-use idle from 457 MB |
 | SearXNG | ≈ 110 MB | |
 | Postgres | ≈ 30 MB | |
+| pocket-tts | ≈ 50 MB idle · ≈ 1.7 GB with one language · ≈ 2.1 GB with two (GPU memory counts) | GPU worker starts on the first request, models unload after 5 min, the worker exits after 15 min idle |
 | Netdata / Wyoming whisper (GPU) / voice-match | ≈ 335 / 270 / 110 MB | Wyoming pair has no consumer now |
 
 LLM sizes: `qwen3.5:4b` 3.4 GB, `phi4-mini` 2.5 GB, `qwen3.5:2b` 2.7 GB, `granite4:350m` 0.85 GB.
 A 4B model **plus** voice output at the same time will push into swap; prefer ≤ 2.7 GB models while using voice.
+Pocket TTS's ≈ 2 GB only exists while it is speaking or recently did — right after a voice reply the GPU worker holds
+that memory for up to 5 min (models) / 15 min (process); `TTS_WORKER_IDLE_EXIT_S` and `TTS_IDLE_UNLOAD_S` in the compose
+file trade that against restart latency.
 
 **Measured 2026-09-29 with the whole stack running (idle ≈ 5 GB used, ≈ 2.3 GB available):** on the Jetson a model's GPU memory shows up as
 the runner's resident memory (the `qwen3.5:2b` runner holds ≈ 3.9 GB), so `qwen3.5:4b` no longer fits: Ollama loaded it ≈ 50 % on the
@@ -164,6 +181,9 @@ CPU and it could not produce 600 tokens in 280 s. `qwen3.5:2b` decodes at 8–10
   unfinished), so LiteLLM couldn't start and — models living only in that DB — had none. Postgres is now a local sidecar and
   models are declared in `config.yaml`. Old virtual keys/spend history were not carried over. Previous `.env` copies:
   `litellm/.env.pre-*.bak` (git-ignored; contain old secrets).
+- **`pocket-tts` needs a one-time manual setup** (gated weights + a Read token, [tts README](tts/README.md#setup)); until
+  then `anno-tts` is served by the Kokoro fallback. It is built locally, so it is excluded from Watchtower, and its base image
+  (`dustynv/pytorch:2.7-r36.4.0`) is **≈ 20 GB on disk** — the price of a CUDA 12.6 / cuDNN 9 stack that actually works on the Orin.
 - **Watchtower** auto-updates every container at 04:00 including `litellm:main-latest`, `open-webui:main`,
   `searxng:latest`, `speaches:latest-cpu` (moving tags). Pin them if an update ever breaks the stack.
 - **Exposure:** Ollama (`:11434`), Netdata (`:19999`), LiteLLM (`:4001`) and Open WebUI (`:8080`) listen on all interfaces.
