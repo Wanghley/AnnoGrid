@@ -152,9 +152,15 @@ model_list:
   - model_name: anno-embed       # embeddings (768 dims)
     litellm_params: {model: ollama/nomic-embed-text, api_base: os.environ/OLLAMA_BASE_URL, timeout: 60}
     model_info: {mode: embedding, max_tokens: 8192, input_cost_per_token: 0.0000000001, output_cost_per_token: 0.0000000010, tags: ["role"]}
-  # Speech. STT is the `speaches` container (CPU, faster-whisper: ~0.55x realtime, int8).
+  # Speech. STT = faster-whisper `small` on the GPU (`stt` container, ../stt): auto-detects pt/en/..., VAD on,
+  # ~0.7 s for a 5 s utterance (the CPU `base` it replaces took ~2x as long and garbled Portuguese).
   - model_name: anno-stt
-    litellm_params: {model: openai/Systran/faster-whisper-base, api_base: "http://speaches:8000/v1", api_key: "none"}
+    litellm_params: {model: openai/whisper-small, api_base: "http://stt:8000/v1", api_key: "none", timeout: 60, max_retries: 0, num_retries: 0}
+    model_info: {mode: audio_transcription, tags: ["role", "speech"]}
+  # Fallback for anno-stt (see `fallbacks` below): the same model on the CPU via speaches. Slower, but keeps
+  # working when the GPU service is down.
+  - model_name: anno-stt-cpu
+    litellm_params: {model: openai/Systran/faster-whisper-small, api_base: "http://speaches:8000/v1", api_key: "none"}
     model_info: {mode: audio_transcription, tags: ["role", "speech"]}
   # TTS = Kyutai Pocket TTS on the GPU (`pocket-tts` container, ../tts): en/pt/es/fr/de/it/nl, the SAME cloned
   # voice in every language (language auto-detected from the text), ~1.6x realtime, first audio ~0.2 s.
@@ -205,6 +211,7 @@ litellm_settings:
     - anno-vision: [moondream:latest]
     - anno-cloud: [qwen3.5:2b]
     - anno-tts: [anno-tts-kokoro]
+    - anno-stt: [anno-stt-cpu]
 
   context_window_fallbacks:
     - qwen3.5:4b: [qwen3.5:2b]
@@ -229,6 +236,12 @@ router_settings:
   model_group_retry_policy:
     anno-tts:
       DefaultRetries: 0            # a stopped `pocket-tts` is a connection error, which only DefaultRetries covers
+      TimeoutErrorRetries: 0
+      InternalServerErrorRetries: 0
+      RateLimitErrorRetries: 0
+      BadRequestErrorRetries: 0
+    anno-stt:
+      DefaultRetries: 0            # a stopped `stt` is a connection error, which only DefaultRetries covers
       TimeoutErrorRetries: 0
       InternalServerErrorRetries: 0
       RateLimitErrorRetries: 0

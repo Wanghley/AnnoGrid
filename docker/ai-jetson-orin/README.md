@@ -11,7 +11,8 @@ Scoped to **AI + monitoring only**.
  LiteLLM :4001 ── Postgres (internal)        keys · budgets · spend · admin UI · /metrics
    │   routing · fallbacks · $ cap
    ├──► Ollama :11434   HOST systemd service   21 local models + 1 cloud-hosted
-   ├──► speaches        CPU speech server      STT faster-whisper · TTS Kokoro = fallback  (internal)
+   ├──► stt             GPU STT (faster-whisper small)  anno-stt: auto-detects pt/en/…, VAD  (internal)
+ ├──► speaches        CPU speech server      STT + TTS fallbacks (whisper-small, Kokoro)  (internal)
    ├──► pocket-tts      GPU TTS (Pocket TTS)   anno-tts: 7 languages, ONE cloned voice  (internal)
    └──  Open WebUI ──► SearXNG                 private web search (internal)
 ```
@@ -19,8 +20,9 @@ Scoped to **AI + monitoring only**.
 | Path | What | Runs as |
 |---|---|---|
 | [`ollama/`](ollama/) | systemd drop-in for the host Ollama service | host (`systemctl`) |
-| [`litellm/`](litellm/) | LiteLLM + Postgres + SearXNG + speaches + pocket-tts + Open WebUI | compose project `litellm` |
+| [`litellm/`](litellm/) | LiteLLM + Postgres + SearXNG + speaches + stt + pocket-tts + Open WebUI | compose project `litellm` |
 | [`tts/`](tts/) | build context, voices and weights for `pocket-tts` ([README](tts/README.md)) | image used by the `litellm` project |
+| [`stt/`](stt/) | build context for the GPU speech-to-text service `stt` ([README](stt/README.md)) | image used by the `litellm` project |
 | [`monitoring/homelable/`](monitoring/homelable/) | network topology map | compose project `homelable` |
 | [`../../arlo/`](../../arlo/) | Wyoming voice services (whisper GPU, piper, wake word) — no consumer since Home Assistant was removed | compose project `arlo` |
 
@@ -65,7 +67,7 @@ Swapping the model behind a role is a one-line change in `config.yaml`; no clien
 | `anno-code` | `qwen2.5-coder:3b` | code |
 | `anno-vision` | `qwen3.5:2b`, thinking **off** | image understanding |
 | `anno-embed` | `nomic-embed-text` | embeddings (768-d) |
-| `anno-stt` | faster-whisper base | speech-to-text (below) |
+| `anno-stt` | faster-whisper small (GPU), fallback `anno-stt-cpu` = whisper-small on the CPU | speech-to-text, auto-detects the language (below) |
 | `anno-tts` | Pocket TTS (GPU), fallback `anno-tts-kokoro` = Kokoro-82M | text-to-speech, 7 languages, one voice (below) |
 | `anno-cloud` | `minimax-m3:cloud` | the one large model that works today — **prompts leave the box** |
 
@@ -105,10 +107,14 @@ request after the GPU worker went idle. Open WebUI keeps sending the voice `af_h
 **Fallback:** if the GPU service is down or fails, LiteLLM answers from **Kokoro-82M on the CPU** (`anno-tts-kokoro` in
 `speaches`: ≈ 1.2× realtime, one voice per language, pt-BR voices `pf_dora` / `pm_alex` / `pm_santa`) within ≈ 2–3 s.
 That is a different voice and `af_heart` reads every language, so treat it as degraded service. Keys with an explicit model
-list (`LITELLM_KEY_SCRIPTS`) must include `anno-tts-kokoro`, or LiteLLM refuses the fallback ("caller is not authorized").
+list (`LITELLM_KEY_SCRIPTS`) must include `anno-tts-kokoro` and `anno-stt-cpu`, or LiteLLM refuses the fallback ("caller is not authorized").
 
-**STT — `anno-stt`:** `speaches` (CPU, faster-whisper base) ≈ 0.55× realtime; round-trip accuracy 100% English / 99% Portuguese
-(measured with Kokoro audio). **Browser mic input needs HTTPS (or localhost)** — plain `http://<tailscale-ip>:8080`
+**STT — `anno-stt`:** the `stt` service ([README](stt/README.md)): faster-whisper `small` on the GPU, language auto-detected,
+VAD on; ≈ 0.9 s for a 4–6 s utterance, ≈ 7% word error rate on pt/en test audio (the CPU `base` it replaced: ≈ 12%, and it
+mangled Portuguese words). **Fallback:** if `stt` is down LiteLLM answers from whisper-small on the CPU (`anno-stt-cpu` in
+`speaches`): same transcripts, but ≈ 11–12 s per short clip, and when `stt` was stopped on purpose the first request took
+15–70 s in total (suspected: the proxy keeps dialling the dead container's cached address until the 60 s route timeout; a fresh process
+failed over in under 2 s). `model_group_retry_policy` needs `DefaultRetries: 0` for connection errors to fall back at once. **Browser mic input needs HTTPS (or localhost)** — plain `http://<tailscale-ip>:8080`
 is blocked by the browser; see "Not done" below.
 
 ## Keys
@@ -156,6 +162,7 @@ Total 7.4 GB. Idle baseline ≈ 4.3 GB used / ≈ 3 GB available; an LLM loads i
 | speaches | 125 MB fresh · 182 MB after use · ≈ 740 MB while speaking | models unload ~4.5 min after last use; `MALLOC_*` settings cut post-use idle from 457 MB |
 | SearXNG | ≈ 110 MB | |
 | Postgres | ≈ 30 MB | |
+| stt | ≈ 0.6 GB resident (process RSS ≈ 0.85 GB; GPU memory counts; never unloads) | ≈ 1.4 GB peak while the model loads at startup; limit 1.8 GB |
 | pocket-tts | ≈ 50 MB idle · ≈ 1.7 GB with one language · ≈ 2.1 GB with two (GPU memory counts) | GPU worker starts on the first request, models unload after 5 min, the worker exits after 15 min idle |
 | Netdata / Wyoming whisper (GPU) / voice-match | ≈ 335 / 270 / 110 MB | Wyoming pair has no consumer now |
 

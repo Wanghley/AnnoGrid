@@ -88,9 +88,9 @@ services:
         limits:
           memory: 256M
 
-  # OpenAI-compatible speech server (STT: faster-whisper, TTS: Kokoro), CPU-only. Reached by
-  # LiteLLM as anno-stt / anno-tts, and by Open WebUI only through LiteLLM. Internal-only.
-  # (The GPU whisper in ../../../arlo speaks Wyoming, not the OpenAI API, so Open WebUI can't use it.)
+  # OpenAI-compatible CPU speech server (TTS: Kokoro, STT: faster-whisper). Now the FALLBACK for both: LiteLLM
+  # reaches it as anno-tts-kokoro / anno-stt-cpu, and Open WebUI only through LiteLLM. Internal-only.
+  # (The GPU whisper in ../../../arlo speaks Wyoming, not the OpenAI API; the `stt` service below is the GPU one.)
   speaches:
     image: ghcr.io/speaches-ai/speaches:latest-cpu
     container_name: speaches
@@ -167,6 +167,39 @@ services:
         limits:
           memory: 3200M
 
+  # Primary STT (`anno-stt`): faster-whisper `small` on the GPU behind an OpenAI-compatible
+  # /v1/audio/transcriptions. Auto-detects the language (pt/en/...), VAD on, ~0.7 s for a 5 s utterance. Built on the
+  # Wyoming whisper image (the only CUDA ctranslate2 for JetPack 6 here); see ../stt/README.md. The model downloads
+  # into the `stt-models` volume on first start (~0.5 GB, a couple of minutes). Internal-only.
+  stt:
+    build: ../stt
+    image: annogrid/stt:jetson
+    container_name: stt
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - STT_MODEL=${STT_MODEL:-small}
+      - STT_COMPUTE_TYPE=int8_float16
+      # Vocabulary hint (names, rooms, jargon) applied when a client sends no `prompt`; empty = none.
+      - STT_INITIAL_PROMPT=${STT_INITIAL_PROMPT:-}
+    volumes:
+      - stt-models:/models/hf
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 240s
+    labels:
+      # Locally built image (not on any registry): keep Watchtower from trying to pull it every night.
+      com.centurylabs.watchtower.enable: "false"
+    deploy:
+      resources:
+        limits:
+          memory: 1800M
+
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
@@ -198,7 +231,7 @@ services:
       - SEARXNG_QUERY_URL=http://searxng:8080/search?q=<query>
       - WEB_SEARCH_RESULT_COUNT=3
       - WEB_SEARCH_CONCURRENT_REQUESTS=1
-      # Speech via LiteLLM -> speaches (CPU). Browser mic input needs HTTPS or localhost.
+      # Speech via LiteLLM -> stt / pocket-tts (GPU), speaches (CPU) as fallback. Browser mic input needs HTTPS or localhost.
       - AUDIO_STT_ENGINE=openai
       - AUDIO_STT_MODEL=anno-stt
       - AUDIO_STT_OPENAI_API_BASE_URL=http://litellm:4000/v1
@@ -227,3 +260,4 @@ services:
 volumes:
   litellm-postgres-data:
   speaches-hf-cache:
+  stt-models:

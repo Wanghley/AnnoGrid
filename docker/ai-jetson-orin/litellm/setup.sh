@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bring up the AI stack on ai-jacaranda: LiteLLM + Postgres + SearXNG + speaches + Open WebUI.
+# Bring up the AI stack on ai-jacaranda: LiteLLM + Postgres + SearXNG + speaches + stt + pocket-tts + Open WebUI.
 # Idempotent: safe to re-run — existing secrets and keys are never regenerated.
 # Ollama itself is a host service (see ../ollama/).
 set -euo pipefail
@@ -48,14 +48,15 @@ mint() {  # <ENV_VAR> <alias> <extra JSON fields>
 }
 mint OPENWEBUI_LITELLM_KEY  open-webui ''
 mint LITELLM_KEY_IDE        ide        '"models":["anno-code","anno-fast","anno-chat","anno-embed","qwen2.5-coder:3b","nomic-embed-text"],"rpm_limit":60'
-mint LITELLM_KEY_SCRIPTS    scripts    '"models":["anno-fast","anno-chat","anno-reason","anno-code","anno-vision","anno-embed","anno-stt","anno-tts","anno-tts-kokoro"],"max_budget":5,"budget_duration":"30d","rpm_limit":30'
+mint LITELLM_KEY_SCRIPTS    scripts    '"models":["anno-fast","anno-chat","anno-reason","anno-code","anno-vision","anno-embed","anno-stt","anno-stt-cpu","anno-tts","anno-tts-kokoro"],"max_budget":5,"budget_duration":"30d","rpm_limit":30'
 mint LITELLM_KEY_PROMETHEUS prometheus '"allowed_routes":["/metrics","/metrics/"]'
 
 # Stage 2: everything (picks up the real Open WebUI key from .env).
 set -a; . ./.env; set +a
 docker compose up -d
 
-# Speech models are pulled from Hugging Face on first use (~140 MB whisper + ~330 MB Kokoro).
+# speaches' fallback models are pulled from Hugging Face on first use (~470 MB whisper-small + ~330 MB Kokoro).
+# (`stt` downloads its own copy of whisper-small into its volume on first start.)
 # Only fetch what speaches doesn't already list; a stalled transfer is retried on the next run.
 echo -n "Waiting for speaches"
 for _ in $(seq 1 30); do
@@ -63,7 +64,7 @@ for _ in $(seq 1 30); do
   echo -n "."; sleep 4
 done
 echo
-for model in Systran/faster-whisper-base speaches-ai/Kokoro-82M-v1.0-ONNX; do
+for model in Systran/faster-whisper-small speaches-ai/Kokoro-82M-v1.0-ONNX; do
   docker exec -i speaches python3 - "$model" <<'PY' || echo "WARNING: could not fetch $model — re-run setup.sh" >&2
 import sys, json, urllib.request
 model, base = sys.argv[1], "http://localhost:8000/v1/models"
